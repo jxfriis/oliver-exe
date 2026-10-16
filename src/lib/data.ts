@@ -1,6 +1,6 @@
 export type ModeId =
   | 'chase' | 'dressup' | 'sketch' | 'poke' | 'gravity'
-  | 'dance' | 'says' | 'games' | 'generator' | 'booth' | 'army';
+  | 'dance' | 'says' | 'tamagotchi' | 'games' | 'generator' | 'booth' | 'army';
 
 export interface AccessoryDef {
   id: string;
@@ -35,6 +35,12 @@ export interface PlacedAccessory {
 }
 
 export const CHASE_PHRASES = ['WAIT FOR ME!', 'COME BACK!', 'WHERE ARE YOU GOING?', 'HEHE!', 'TOO FAST!', 'WHEEE!'];
+export const CHASE_TAUNTS = [
+  'TOO SLOW bestie 💨', 'WHIFF +1', 'my grandma clicks faster', 'CANNOT CATCH ME 😜',
+  'nice try!!', 'blink and you miss me', 'over here 🤡', 'skill issue tbh',
+  'keep up grandpa', '*does a little spin*', 'you almost had me (no)',
+  'this is my cardio', 'ur cursor is SCARY slow', 'boop. missed.', 'I get paid for this',
+];
 export const POKE_PHRASES_HEAD = ['OW! MY CURLS!', 'HEY! CAREFUL!', 'BOING!', 'MY GLASSES!!'];
 export const POKE_PHRASES_BODY = ['HEHE THAT TICKLES!', 'POKED!', 'OOF!', 'DO IT AGAIN!'];
 export const POKE_PHRASES_FEET = ['MY SNEAKERS!', 'TICKLE FEET!', 'EEP!'];
@@ -49,6 +55,7 @@ export const ACHIEVEMENTS: { id: string; name: string; desc: string; icon: strin
   { id: 'first-contact', name: 'First Contact', desc: 'Click Oliver for the first time', icon: '👋' },
   { id: 'fashion-disaster', name: 'Fashion Disaster', desc: 'Wear 5 accessories at once', icon: '🎩' },
   { id: 'menace', name: 'Professional Menace', desc: 'Poke Oliver 20 times', icon: '👉' },
+  { id: 'balloon', name: 'Balloon of Man', desc: 'Inflate Oliver to maximum cookie-poke size', icon: '🎈' },
   { id: 'chaos', name: 'Maximum Chaos', desc: 'Fill the chaos meter', icon: '🌪️' },
   { id: 'dancer', name: 'Dance Machine', desc: 'Start a dance party', icon: '🕺' },
   { id: 'artist', name: 'Oliver Picasso', desc: 'Draw 25 strokes on Oliver', icon: '🎨' },
@@ -61,6 +68,7 @@ export const ACHIEVEMENTS: { id: string; name: string; desc: string; icon: strin
   { id: 'baller', name: 'Streetballer', desc: 'Score 8+ in Oliver Hoops', icon: '🏀' },
   { id: 'pongchamp', name: 'Pong Champion', desc: 'Beat Oliver at Pong', icon: '🏓' },
   { id: 'goblin', name: 'Coin Goblin', desc: 'Grab 15 coins in Coin Dash', icon: '🪙' },
+  { id: 'petowner', name: 'Certified Oliver Owner', desc: 'Keep Tamagotchi-Oliver alive for a full minute', icon: '🐣' },
 ];
 
 export const BOOTH_BGS = [

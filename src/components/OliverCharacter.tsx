@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { gearDef } from './FittedGear';
 import { HD_CUTOUT, HD_PHOTO_FRAMED, HD_SPRITES, SLOT_ANCHORS, SPRITES, type AnySprite, type HdSpriteId, type SpriteId, type SlotId } from '../lib/sprites';
 import type { PlacedAccessory } from '../lib/data';
@@ -22,7 +22,9 @@ interface Props {
   skin: Skin;
   sprite: StageSprite; // pixel/HD pose, or 'cutout-photo' for the transparent photo
   flipX?: boolean;
-  transform: OliverTransform;
+  // live transform: App's physics loop writes every frame; this component mirrors
+  // it straight to the DOM (zero React re-renders for movement = locked 60fps)
+  transformRef: React.MutableRefObject<OliverTransform>;
   height: number;
   accessories: PlacedAccessory[];
   selectedUid: number | null;
@@ -40,6 +42,7 @@ interface Props {
   danceActive: boolean;
   danceStyle: string;
   dimmed?: boolean;
+  fat?: number; // cookie-poke inflation 0..1 — HD swaps the fat sprites, pixel squashes rounder
 }
 
 const SPRITE_ASPECT: Record<SpriteId | HdSpriteId, number> = {
@@ -50,6 +53,10 @@ const SPRITE_ASPECT: Record<SpriteId | HdSpriteId, number> = {
   'flap-16': 1.05, 'rocket-16': 1.15,
   'sleep-16': 1.30, 'snake-16': 1.0,
   'face-happy': 0.80, 'face-angry': 0.80,
+  'banana-slip': 1.0, 'laugh-tears': 0.95, 'confused-scratch': 0.85,
+  'confetti-jump': 0.95, 'facepalm': 0.9, 'panic-claw': 0.95, 'flex': 0.95,
+  'screen-kiss': 0.96, 'smooch': 0.98,
+  'hd-fat': 0.67, 'hd-fat-max': 0.66,
   'hd-front-stand': 0.52, 'hd-side-right': 0.50, 'hd-back-stand': 0.55,
   'hd-topdown': 0.75, 'hd-fall': 0.80,
   'hd-walk-right-a': 0.55, 'hd-walk-right-b': 0.55,
@@ -69,7 +76,8 @@ const HD_FACES: AnySprite[] = ['hd-face-angry', 'hd-face-happy'];
 const PIXEL_FACES: AnySprite[] = ['face-happy', 'face-angry'];
 
 const OliverCharacter = React.forwardRef<HTMLDivElement, Props>(function OliverCharacter(props, ref) {
-  const { transform: t, height } = props;
+  const { height } = props;
+  const t = props.transformRef.current;
   const [framedFallback, setFramedFallback] = useState(false);
   const aspect = props.sprite === 'cutout-photo' ? 0.62 : SPRITE_ASPECT[props.sprite as AnySprite];
   const w = height * aspect;
@@ -83,11 +91,46 @@ const OliverCharacter = React.forwardRef<HTMLDivElement, Props>(function OliverC
       : 'discoDance .55s ease-in-out infinite alternate'
       : undefined;
 
+  const pixelated = props.skin === 'pixel';
   const imgSrc = props.sprite === 'cutout-photo'
     ? (framedFallback ? HD_PHOTO_FRAMED : HD_CUTOUT)
     : spriteSrc(props.sprite as AnySprite);
-  const pixelated = props.skin === 'pixel';
+  const fatLevel = props.fat ?? 0;
+  const fatSrc = !pixelated && props.sprite === 'cutout-photo' && fatLevel > 0.25
+    ? (fatLevel >= 0.8 ? HD_SPRITES['hd-fat-max'] : fatLevel >= 0.5 ? HD_SPRITES['hd-fat'] : null)
+    : null;
+  const shownSrc = fatSrc ?? imgSrc;
   const madBadge = props.skin === 'pixel' ? SPRITES['face-angry'] : HD_SPRITES['hd-face-angry'];
+
+  // crossfade between poses so sprite swaps read as animation, not flicker
+  const prevSrcRef = useRef(shownSrc);
+  const [fadeKey, setFadeKey] = useState(0);
+  useEffect(() => {
+    if (prevSrcRef.current !== shownSrc) {
+      prevSrcRef.current = shownSrc;
+      setFadeKey((k) => k + 1);
+    }
+  }, [shownSrc]);
+
+  // 60fps mirror: copy the live transform ref straight to the DOM node.
+  // Same string React would render — but without re-rendering anything.
+  const nodeRef = useRef<HTMLDivElement | null>(null);
+  const flipRef = useRef(props.flipX);
+  flipRef.current = props.flipX;
+  useEffect(() => {
+    let raf = 0;
+    let last = '';
+    const apply = () => {
+      raf = requestAnimationFrame(apply);
+      const n = nodeRef.current;
+      if (!n) return;
+      const v = props.transformRef.current;
+      const s = `translate(${v.x}px, ${v.y}px) rotate(${v.rot + v.tilt}deg) scale(${(v.scale * v.squashX) * (flipRef.current ? -1 : 1)}, ${v.scale * v.squashY})`;
+      if (s !== last) { last = s; n.style.transform = s; }
+    };
+    raf = requestAnimationFrame(apply);
+    return () => cancelAnimationFrame(raf);
+  }, [props.transformRef]);
 
   const regionFromPoint = (px: number, py: number) => {
     if (PIXEL_FACES.includes(props.sprite as AnySprite) || HD_FACES.includes(props.sprite as AnySprite)) {
@@ -132,7 +175,11 @@ const OliverCharacter = React.forwardRef<HTMLDivElement, Props>(function OliverC
 
   return (
     <div
-      ref={ref}
+      ref={(n) => {
+        nodeRef.current = n;
+        if (typeof ref === 'function') ref(n);
+        else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = n;
+      }}
       data-oliver="true"
       className="relative no-select"
       style={{
@@ -140,11 +187,16 @@ const OliverCharacter = React.forwardRef<HTMLDivElement, Props>(function OliverC
         height,
         transform: `translate(${t.x}px, ${t.y}px) rotate(${t.rot + t.tilt}deg) scale(${(t.scale * t.squashX) * (props.flipX ? -1 : 1)}, ${t.scale * t.squashY})`,
         transition: 'transform 60ms linear',
+        // pixel-mode inflation: widen him like a balloon as poke count climbs
+        ...(fatLevel > 0.05 && pixelated
+          ? { width: w * (1 + fatLevel * 0.45), transition: 'width .28s ease-out, transform 60ms linear' }
+          : null),
+        // HD gets a soft contact shadow + cool rim light; pixel keeps the hard arcade drop
         filter: props.mad
-          ? 'drop-shadow(0 0 26px rgba(255,40,30,.85)) saturate(1.5)'
+          ? 'drop-shadow(0 0 26px rgba(255,40,30,.85)) drop-shadow(0 0 60px rgba(255,80,40,.4)) saturate(1.5)'
           : pixelated
-            ? 'drop-shadow(0 14px 0 rgba(10,8,40,.45)) drop-shadow(0 0 18px rgba(198,242,78,.35))'
-            : 'drop-shadow(0 22px 22px rgba(30,27,58,.28))',
+            ? 'drop-shadow(0 14px 0 rgba(10,8,40,.35)) drop-shadow(0 0 18px rgba(198,242,78,.35)) brightness(1.06)'
+            : 'drop-shadow(0 26px 16px rgba(30,27,58,.22)) drop-shadow(6px 0 10px rgba(185,167,249,.22)) drop-shadow(-4px 0 8px rgba(255,210,63,.18)) brightness(1.1) contrast(1.05) saturate(1.12)',
         animation: props.mad ? 'madShake .35s linear infinite' : undefined,
       }}
     >
@@ -157,6 +209,7 @@ const OliverCharacter = React.forwardRef<HTMLDivElement, Props>(function OliverC
         @keyframes hairBoing { 0%{transform:translateY(0) scale(1)} 35%{transform:translateY(6px) scale(1.06,.9)} 70%{transform:translateY(-8px) scale(.96,1.06)} 100%{transform:translateY(0) scale(1)} }
         @keyframes madShake { 0%{ margin-left:-3px;} 25%{ margin-left:3px;} 50%{ margin-left:-2px;} 75%{ margin-left:2px;} 100%{ margin-left:0;} }
         @keyframes hitFlash { 0%{ transform: scale(.4) rotate(-14deg); opacity:0;} 35%{ transform: scale(1.25) rotate(6deg); opacity:1;} 100%{ transform: scale(1.1) rotate(0); opacity:0;} }
+        @keyframes poseBlend { 0%{ filter: brightness(1.5) blur(1.5px);} 100%{ filter: none;} }
       `}</style>
 
       {gearLayer(true)}
@@ -171,16 +224,18 @@ const OliverCharacter = React.forwardRef<HTMLDivElement, Props>(function OliverC
           }}
         >
           <img
-            src={imgSrc}
+            key={fadeKey}
+            src={shownSrc}
             alt="Oliver"
             draggable={false}
             onError={() => { if (props.sprite === 'cutout-photo') setFramedFallback(true); }}
             className="w-full h-full"
             style={{
-              objectFit: props.sprite === 'cutout-photo' ? 'cover' : 'contain',
+              objectFit: props.sprite === 'cutout-photo' ? (fatSrc ? 'contain' : 'cover') : 'contain',
               imageRendering: pixelated ? 'pixelated' : 'auto',
               transform: `translate(${t.faceX * 6}px, ${t.faceY * 4}px)`,
               opacity: props.dimmed ? 0.55 : 1,
+              animation: fadeKey > 0 && !pixelated ? 'poseBlend .28s ease-out both' : undefined,
             }}
           />
           {/* mad overlay: angry face badge */}
@@ -199,7 +254,7 @@ const OliverCharacter = React.forwardRef<HTMLDivElement, Props>(function OliverC
             <img src="./fx-anger.png" alt="" draggable={false}
               className="absolute pointer-events-none"
               style={{
-                left: '50%', top: '42%', width: '78%',
+                left: '50%', top: '40%', width: '110%',
                 transform: 'translate(-50%,-50%)',
                 animation: 'hitFlash .5s ease-out forwards',
                 filter: 'drop-shadow(0 0 12px rgba(255,30,30,.8))',
@@ -291,4 +346,4 @@ function GearView({ p, slot, anchors, boxW, selected, interactive, onSelect, onM
   );
 }
 
-export default OliverCharacter;
+export default React.memo(OliverCharacter);

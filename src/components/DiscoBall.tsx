@@ -18,12 +18,16 @@ export default function DiscoBall({ bit16 }: { bit16: boolean }) {
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(cv);
+    const ctx = cv.getContext('2d')!;
+    ctx.setTransform(Math.min(2, window.devicePixelRatio || 1), 0, 0, Math.min(2, window.devicePixelRatio || 1), 0, 0);
     let raf = 0;
+    let tick = 0;
     const loop = () => {
       raf = requestAnimationFrame(loop);
+      // 30fps is plenty for a spinning ball — same speed, half the canvas work
+      if ((tick++ & 1) === 0) return;
       const s = S.current;
-      s.t += 0.016;
-      const ctx = cv.getContext('2d');
+      s.t += 0.032;
       if (!ctx || !s.w) return;
       const cx = s.w / 2, cy = s.h / 2 + 6, R = Math.min(s.w, s.h) / 2 - 8;
       ctx.clearRect(0, 0, s.w, s.h);

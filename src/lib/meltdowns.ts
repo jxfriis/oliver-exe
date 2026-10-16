@@ -12,7 +12,6 @@ export const MELTDOWNS: Meltdown[] = [
   { id: 'invasion', title: 'CLONE INVASION', shout: 'FINE! WE ALL QUIT!' },
   { id: 'giant', title: 'MEGA OLIVER', shout: 'LOOK WHAT YOU DID!' },
   { id: 'blackout', title: 'RAGE BLACKOUT', shout: 'TURN IT ALL OFF!!' },
-  { id: 'wardrobe-explosion', title: 'WARDROBE EXPLOSION', shout: 'I DRESS MYSELF NOW!' },
   { id: 'gravity-flip', title: 'GRAVITY REVENGE', shout: 'UP IS DOWN NOW!' },
   { id: 'stampede', title: 'STAMPEDE', shout: 'RUN HIM OVER, BOYS!' },
 ];

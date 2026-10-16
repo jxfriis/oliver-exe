@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  MousePointer2, Shirt, Pencil, Hand, Rocket, PartyPopper, MessageCircle,
+  MousePointer2, Shirt, Pencil, Hand, Rocket, PartyPopper,
   Gamepad2, Sparkles, Camera, Users, Volume2, VolumeX, HelpCircle, RotateCcw,
-  Dices, Trophy, Star, Zap, Crown, Timer, Play, Pause, Binary, Settings,
+  Dices, Trophy, Star, Zap, Crown, Timer, Play, Pause, Binary, Settings, Egg,
 } from 'lucide-react';
 import OliverCharacter, { DEFAULT_TRANSFORM, type OliverTransform, type StageSprite } from './components/OliverCharacter';
 import SketchLayer, { type SketchHandle, type Stroke, type StampMark } from './components/SketchLayer';
 import BitLighting from './components/BitLighting';
 import DiscoFloor from './components/DiscoFloor';
 import Landing from './components/Landing';
+import IntroCinematic from './components/IntroCinematic';
 import Tutorial, { tourSeen, markTourSeen } from './components/Tutorial';
 import { GEAR, gearDef } from './components/FittedGear';
 import Basketball from './games/Basketball';
@@ -20,7 +21,7 @@ import Snake from './games/Snake';
 import { CoinDash, WhackOliver } from './games/FunGames';
 import { sfx, setSoundEnabled, startBeat, stopBeat, setVolume as setMasterVol, getVolume } from './lib/sound';
 import {
-  CHASE_PHRASES, POKE_PHRASES_HEAD, POKE_PHRASES_BODY, POKE_PHRASES_FEET,
+  CHASE_PHRASES, CHASE_TAUNTS, POKE_PHRASES_HEAD, POKE_PHRASES_BODY, POKE_PHRASES_FEET,
   GENERATOR_NAMES, ACHIEVEMENTS, BOOTH_BGS, type ModeId, type PlacedAccessory,
 } from './lib/data';
 import { SPRITES, HD_SPRITES, HD_CUTOUT, walkFrame, hdWalkFrame, hdSpriteFor, type SpriteId } from './lib/sprites';
@@ -41,12 +42,14 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [interactions, setInteractions] = useState(0);
   const [chaos, setChaos] = useState(12);
-  const [transform, setTransform] = useState<OliverTransform>(DEFAULT_TRANSFORM);
+  // single source of truth for Oliver's live position — written every frame by the
+  // physics loop, mirrored straight to the DOM (no React re-render for movement)
+  const transformRef = useRef<OliverTransform>(DEFAULT_TRANSFORM);
+  const shadowRef = useRef<HTMLDivElement | null>(null);
+  const hintRef = useRef<HTMLDivElement | null>(null);
   const [accessories, setAccessories] = useState<PlacedAccessory[]>([]);
   const [selectedUid, setSelectedUid] = useState<number | null>(null);
   const [bubble, setBubble] = useState<{ text: string; style: BubbleStyle } | null>({ text: 'Hi! I\'m Oliver. Click me!', style: 'normal' });
-  const [sayText, setSayText] = useState('Hello! I am Oliver!');
-  const [sayStyle, setSayStyle] = useState<BubbleStyle>('normal');
   const [stars, setStars] = useState<{ id: number; x: number; y: number; txt: string }[]>([]);
   const [pokeCount, setPokeCount] = useState(0);
   const [combo, setCombo] = useState(0);
@@ -74,14 +77,32 @@ export default function App() {
   const [confetti, setConfetti] = useState<{ id: number; x: number; c: string; d: number }[]>([]);
   // gravity
   const [gravLevel, setGravLevel] = useState<'normal' | 'low' | 'zero'>('normal');
-  const [balls, setBalls] = useState<{ id: number; x: number; y: number; vx: number; vy: number; c: string }[]>([]);
+  const [balls, setBalls] = useState<{ id: number; x: number; y: number; vx: number; vy: number; c: string; exp?: number }[]>([]);
   // games
   const [gameSub, setGameSub] = useState<GameSub>('catch');
   const [catchOn, setCatchOn] = useState(false);
   const [catchScore, setCatchScore] = useState(0);
   const [catchTime, setCatchTime] = useState(30);
   const [catchBest, setCatchBest] = useState(() => Number(localStorage.getItem('oliver-catch-best') || 0));
+  // cookie-poke inflation: fat rises with rapid pokes and deflates slowly when you stop
+  const [fat, setFatState] = useState(0);
+  const fatRef = useRef(0);
+  const setFat = useCallback((v: number) => {
+    const nv = Math.max(0, Math.min(1, v));
+    if (Math.abs(nv - fatRef.current) < 0.008) return;
+    fatRef.current = nv; setFatState(nv);
+  }, []);
   const [entered, setEntered] = useState(false);
+  const [introPlaying, setIntroPlaying] = useState(false);
+  // Tamagotchi-Oliver virtual pet state (persists across tabs + reloads)
+  const tamagotchiRef = useRef<{ last: number; food: number; fun: number; clean: number } | null>(null);
+  if (!tamagotchiRef.current) {
+    try {
+      const raw = JSON.parse(localStorage.getItem('oliver-tama') || 'null');
+      tamagotchiRef.current = raw && typeof raw.last === 'number' ? raw : { last: Date.now(), food: 80, fun: 80, clean: 80 };
+    } catch { tamagotchiRef.current = { last: Date.now(), food: 80, fun: 80, clean: 80 }; }
+  }
+  const [tamaTick, setTamaTick] = useState(0);
   const [tourStep, setTourStep] = useState(-1);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [vol, setVol] = useState(() => getVolume());
@@ -110,7 +131,10 @@ export default function App() {
   const flipRef = useRef(false);
   const poseT = useRef(0);
   const decayRef = useRef(0);
+  const frameRef = useRef(0); // shared frame counter for throttling secondary physics
   const walkDist = useRef(0);
+  const tamaHappyRef = useRef(0);
+  const fatMaxedRef = useRef(false);
 
   // chase-the-runner score
   const [catches, setCatches] = useState(0);
@@ -127,7 +151,7 @@ export default function App() {
     dragging: false, dragOffX: 0, dragOffY: 0,
     distractX: 0, distractY: 0, distractT: 0,
     lastBubble: 0, lastInteract: Date.now(),
-    hoverStart: 0, jumpV: 0, stunUntil: 0, dodgeAt: 0, shrink: 1,
+    hoverStart: 0, jumpV: 0, stunUntil: 0, dodgeAt: 0, jukeAt: 0, shrink: 1,
     avoidX: -140, avoidY: -100, avoidOliverX: 60, avoidOliverY: 40,
   });
   const [oliverH, setOliverH] = useState(440);
@@ -142,6 +166,16 @@ export default function App() {
   useEffect(() => { setSoundEnabled(soundOn); if (!soundOn) rickStop(); }, [soundOn]);
   useEffect(() => { tracksSetVolume(); }, [vol]);
   useEffect(() => { preloadAll(); warmAudio(); }, []);
+
+  // slowly let the air out when poking stops (cookie clicker inverse)
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (fatRef.current > 0.01) setFat(fatRef.current - Math.max(0.004, fatRef.current * 0.02));
+    }, 120);
+    return () => clearInterval(id);
+  }, [setFat]);
+  // changing rooms = he changes back. No fat Oliver lurking in other modes.
+  useEffect(() => { setFat(0); fatMaxedRef.current = false; }, [mode, setFat]);
 
   const unlock = useCallback((id: string) => {
     setUnlocked((u) => {
@@ -176,31 +210,23 @@ export default function App() {
       setBalls((b) => [...b.slice(-4), ...Array.from({ length: 8 }, (_, i) => ({
         id: now + i, x: (Math.random() - 0.5) * 400, y: -200 - i * 40,
         vx: (Math.random() - 0.5) * 6, vy: 2, c: ['#B9A7F9', '#2B50E0', '#C6F24E', '#FF6B5B', '#FFD23F'][i % 5],
+        exp: now + 6000 + i * 350, // the meteors burn out by themselves
       }))]);
     }
-    else if (m.id === 'invasion') { spawnArmy(20); }
+    else if (m.id === 'invasion') { spawnArmy(20, 7000); }
     else if (m.id === 'giant') { setGiantUntil(now + 10000); }
     else if (m.id === 'blackout') { setBlackoutUntil(now + 5000); startBeat(140); setTimeout(() => stopBeat(), 5200); }
-    else if (m.id === 'wardrobe-explosion') {
-      const shuffled = [...GEAR].sort(() => Math.random() - 0.5).slice(0, 6);
-      const boomIds = shuffled.map(() => uidCounter++);
-      setAccessories(shuffled.map((d, i) => ({ uid: boomIds[i], defId: d.id, dx: 0, dy: 0, scale: 1, rot: (Math.random() - 0.5) * 24 })));
-      // the clothes vanish again almost as fast as they appeared
-      setTimeout(() => {
-        setAccessories((acc) => acc.filter((x) => !boomIds.includes(x.uid)));
-        setSelectedUid((s) => (s != null && boomIds.includes(s) ? null : s));
-      }, 4000);
-      meme('hehehaw');
-    }
     else if (m.id === 'gravity-flip') {
-      setMode('gravity'); setGravLevel('zero');
-      P.vy = -16; P.vx = (Math.random() - 0.5) * 10;
+      // he does NOT teleport you to another tab anymore — rage gravity right here,
+      // then it eases back after a beat. Zero mode would fling him off-screen.
+      setGravLevel('low');
+      P.vy = -14; P.vx = (Math.random() - 0.5) * 10;
       setTimeout(() => setGravLevel('normal'), 8000);
     }
     else if (m.id === 'stampede') {
       setScurry(true);
       setTimeout(() => setScurry(false), 6000);
-      spawnArmy(8);
+      spawnArmy(8, 6500);
       setConfetti(Array.from({ length: 40 }, (_, i) => ({
         id: now + i, x: Math.random() * 100,
         c: ['#B9A7F9', '#2B50E0', '#C6F24E', '#FF6B5B', '#FFD23F'][i % 5],
@@ -249,10 +275,10 @@ export default function App() {
     const P = phys.current;
     const loop = () => {
       raf = requestAnimationFrame(loop);
+      const frame = frameRef.current++;
       const stage = stageRef.current;
       const W = stage?.clientWidth || 800, H = stage?.clientHeight || 600;
       const now = Date.now();
-      const t = transform;
 
       // squash decay
       if (P.squashT > 0) {
@@ -261,15 +287,15 @@ export default function App() {
       }
 
       if (mode === 'chase') {
-        // CATCH THE RUNNER: Oliver flees the cursor. Click him to catch —
-        // each catch makes him faster and smaller. Misses make him cocky.
+        // CATCH THE RUNNER: Oliver flees the cursor — and he is GOOD at it.
+        // Long panicked flee radius, sidestep dodges, random jukes and sprints.
         if (now < P.stunUntil) {
           P.vx *= 0.9; P.vy *= 0.9; P.px += P.vx; P.py += P.vy;
         } else {
           const dx = P.px - P.cx, dy = P.py - P.cy;
           const d = Math.hypot(dx, dy) || 1;
           const lvl = Math.min(8, runLevel);
-          const fleeR = Math.min(W, H) * 0.30;
+          const fleeR = Math.min(W, H) * 0.42 + Math.max(0, 320 - d) * 0.5;
           let tx = P.px + (dx / d) * fleeR;
           let ty = P.py + (dy / d) * fleeR;
           if (P.distractT > now) { tx = P.distractX; ty = P.distractY; }
@@ -279,30 +305,38 @@ export default function App() {
             P.distractT = now + 1500;
             if (Math.random() < 0.5) say(rand(['ooh, shiny…', 'brb, distracted!', 'was that confetti?']));
           }
-          const k = 0.010 + lvl * 0.0012;
+          const k = 0.014 + lvl * 0.0015;
           P.vx += (tx - P.px) * k; P.vy += (ty - P.py) * k;
-          // dodge! sidestep when the cursor gets close
-          if (d < 130 && now > P.dodgeAt) {
-            P.dodgeAt = now + 900;
+          // dodge! sidestep EARLY and often when the cursor gets close
+          if (d < 220 && now > P.dodgeAt) {
+            P.dodgeAt = now + 550;
             const s = Math.random() < 0.5 ? 1 : -1;
-            P.vx += (-dy / d) * 7 * s; P.vy += (dx / d) * 7 * s;
+            P.vx += (-dy / d) * 10 * s; P.vy += (dx / d) * 10 * s;
             sfx.dodge();
-            if (Math.random() < 0.3) { say(rand(['TOO SLOW!', 'WHIFF!', 'CANNOT CATCH ME!', 'nice try!!'])); meme('hehe'); }
+            if (Math.random() < 0.45) { say(rand(CHASE_TAUNTS)); meme('hehe'); }
           }
-          const cap = 4.3 + lvl * 0.65;
+          // random juke even without pressure — he is just like that
+          if (Math.random() < 0.006 && now > P.jukeAt) {
+            P.jukeAt = now + 1200;
+            const a = Math.random() * Math.PI * 2;
+            P.vx += Math.cos(a) * 6; P.vy += Math.sin(a) * 6;
+            if (Math.random() < 0.3) say(rand(['keep up bestie 💨', 'too slow!!', '*wink*']));
+          }
+          const cap = 5.6 + lvl * 0.7;
           const speed = Math.hypot(P.vx, P.vy);
           if (speed > cap) { P.vx *= cap / speed; P.vy *= cap / speed; }
           P.vx *= 0.985; P.vy *= 0.985;
           P.px += P.vx; P.py += P.vy;
         }
         const speed = Math.hypot(P.vx, P.vy);
-        // clamp + edge peek-back
-        const mx = W / 2 - 90, my = H / 2 - 120;
-        if (Math.abs(P.px) > mx || Math.abs(P.py) > my) {
-          P.px = Math.max(-mx, Math.min(mx, P.px));
-          P.py = Math.max(-my, Math.min(my, P.py));
-          P.vx *= -0.4; P.vy *= -0.4;
-          if (Math.random() < 0.1) { say('peek-a-boo!'); sfx.pop(); }
+        // clamp + edge peek-back — clamped hard so he can NEVER leave the screen
+        {
+          const mx = W / 2 - oliverH * 0.34, my = H / 2 - oliverH * 0.56;
+          if (P.px > mx) { P.px = mx; if (P.vx > 0) P.vx *= -0.4; }
+          if (P.px < -mx) { P.px = -mx; if (P.vx < 0) P.vx *= -0.4; }
+          if (P.py > my) { P.py = my; if (P.vy > 0) P.vy *= -0.4; }
+          if (P.py < -my) { P.py = -my; if (P.vy < 0) P.vy *= -0.4; }
+          if (Math.random() < 0.001) { say('peek-a-boo!'); sfx.pop(); }
         }
         P.tilt += ((P.vx * 0.9) - P.tilt) * 0.1;
         P.faceX += (Math.max(-1, Math.min(1, (P.cx - P.px) / 200)) - P.faceX) * 0.08;
@@ -331,23 +365,27 @@ export default function App() {
           if (P.py < -H / 2) { P.py = -H / 2; P.vy = Math.abs(P.vy) * 0.6; }
           P.tilt += ((P.vx * 1.2) - P.tilt) * 0.08;
         }
-        // balls physics (skip when empty to avoid 60fps re-renders)
-        if (mode === 'gravity' && balls.length > 0) {
-        setBalls((bs) => bs.map((b) => {
+        // balls physics (skip when empty to avoid 60fps re-renders;
+        // 30fps with double substeps = identical trajectories, half the setStates)
+        if (mode === 'gravity' && balls.length > 0 && (frame & 1) === 0) {
+        const stepBall = (b: { id: number; x: number; y: number; vx: number; vy: number; c: string; exp?: number }) => {
           let { x, y, vx, vy } = b;
-          vy += gravLevel === 'normal' ? 0.5 : gravLevel === 'low' ? 0.15 : 0;
-          x += vx; y += vy;
-          const bx = W / 2 - 20, by = H / 2 - 20;
-          if (x < -bx) { x = -bx; vx = Math.abs(vx) * 0.8; }
-          if (x > bx) { x = bx; vx = -Math.abs(vx) * 0.8; }
-          if (y > by) { y = by; vy = -Math.abs(vy) * 0.78; vx *= 0.98; }
-          if (y < -by) { y = -by; vy = Math.abs(vy) * 0.8; }
-          // simplified Oliver collision proxy (circle)
-          const dx = x - P.px, dy = y - (P.py - 20);
-          const d = Math.hypot(dx, dy);
-          if (d < 110 && d > 1) { const push = (110 - d) / 110; x += (dx / d) * push * 14; y += (dy / d) * push * 14; vx += (dx / d) * 1.2; vy += (dy / d) * 1.2; }
+          for (let s = 0; s < 2; s++) {
+            vy += gravLevel === 'normal' ? 0.5 : gravLevel === 'low' ? 0.15 : 0;
+            x += vx; y += vy;
+            const bx = W / 2 - 20, by = H / 2 - 20;
+            if (x < -bx) { x = -bx; vx = Math.abs(vx) * 0.8; }
+            if (x > bx) { x = bx; vx = -Math.abs(vx) * 0.8; }
+            if (y > by) { y = by; vy = -Math.abs(vy) * 0.78; vx *= 0.98; }
+            if (y < -by) { y = -by; vy = Math.abs(vy) * 0.8; }
+            // simplified Oliver collision proxy (circle)
+            const dx = x - P.px, dy = y - (P.py - 20);
+            const d = Math.hypot(dx, dy);
+            if (d < 110 && d > 1) { const push = (110 - d) / 110; x += (dx / d) * push * 14; y += (dy / d) * push * 14; vx += (dx / d) * 1.2; vy += (dy / d) * 1.2; }
+          }
           return { ...b, x, y, vx, vy };
-        }));
+        };
+        setBalls((bs) => bs.map(stepBall).filter((b) => !b.exp || now < b.exp));
         }
       } else if (mode === 'games' && gameSub === 'catch' && catchOn) {
         // Oliver teleports handled by timer; gentle wobble here
@@ -366,8 +404,8 @@ export default function App() {
       // space jump impulse
       if (P.jumpV && mode !== 'gravity') { P.py -= 6; P.jumpV = 0; }
 
-      // army wander
-      if (army.length) {
+      // army wander — 20fps is plenty for drifting minis (every 3rd frame)
+      if (army.length && (frame % 3) === 0) {
         setArmy((arr) => arr.map((m) => {
           let vx = m.vx, vy = m.vy;
           if (armyFollow) { vx += (P.cx - m.x) * 0.0006; vy += (P.cy - m.y) * 0.0006; }
@@ -406,15 +444,28 @@ export default function App() {
         const mad = now < madUntil;
         const speed = Math.hypot(P.vx, P.vy);
         if (!mad) {
+          // the new action sheet gets used for spicy moments: dodge panic, wins, slips
+          const recentDodge = mode === 'chase' && Math.hypot(P.px - P.cx, P.py - P.cy) < 300 && now - P.dodgeAt < 900;
+          const burstWin = (mode === 'games' && gameSub === 'catch' && catchOn) || (mode === 'dance' && danceOn);
           if (bit16) {
             if (sleeping) sp = 'sleep-16';
+            else if (recentDodge) sp = rand(['panic-claw', 'laugh-tears', 'flex'] as SpriteId[]);
             else if (mode === 'dressup') sp = 'front-stand';
+            else if (mode === 'tamagotchi') {
+              // pocket pet: desperate when neglected, happy right after care
+              const T = tamagotchiRef.current!;
+              if (Math.min(T.food, T.fun, T.clean) < 25) sp = 'topdown-bow';
+              else if (now - (tamaHappyRef.current || 0) < 2500) sp = 'face-happy';
+              else if (speed > 1.1) { walkDist.current += speed * 9; sp = walkFrame(walkDist.current); fl = P.vx < 0; }
+              else sp = 'front-stand';
+            }
             else if (mode === 'chase') {
               if (speed > 1.1) { walkDist.current += speed * 9; sp = walkFrame(walkDist.current); fl = P.vx < 0; }
               else sp = P.cx - P.px < 0 ? 'side-stand-left' : 'side-stand-right';
             }
             else if (mode === 'gravity') sp = (!P.dragging && (Math.abs(P.vy) > 2.5 || Math.abs(P.vx) > 3)) ? 'sit-fall' : 'front-stand';
             else if (mode === 'dance' && danceOn) sp = Math.floor(now / 380) % 2 ? 'dance-point-up' : 'dance-point-left';
+            else if (burstWin && Math.random() < 0.01) sp = rand(['confetti-jump', 'laugh-tears'] as SpriteId[]);
             else if (mode === 'games' && gameSub === 'catch') sp = 'face-happy';
             else if (mode === 'games' && gameSub === 'avoid' && avoidStatus === 'playing') {
               walkDist.current += 7; sp = walkFrame(walkDist.current); fl = (P.cx - P.avoidOliverX) < 0;
@@ -430,7 +481,8 @@ export default function App() {
               gameSub: mode === 'games' ? gameSub : undefined,
               avoiding: mode === 'games' && gameSub === 'avoid' && avoidStatus === 'playing',
             });
-            if (hd) {
+            if (recentDodge && Math.random() < 0.3) sp = rand(['panic-claw', 'laugh-tears', 'flex'] as SpriteId[]);
+            else if (hd) {
               if (mode === 'chase' && speed > 1.1) { walkDist.current += speed * 9; sp = hdWalkFrame(walkDist.current); fl = P.vx < 0; }
               else { sp = hd; fl = hd.startsWith('hd-walk') ? P.vx < 0 : false; }
             }
@@ -452,16 +504,31 @@ export default function App() {
         squashX: P.squashX, squashY: P.squashY, tilt: Math.max(-14, Math.min(14, P.tilt)),
         faceX: P.faceX, faceY: P.faceY,
       };
-      setTransform((prev) =>
-        Math.abs(prev.x - nt.x) < 0.05 && Math.abs(prev.y - nt.y) < 0.05 &&
-        Math.abs(prev.tilt - nt.tilt) < 0.05 && Math.abs(prev.scale - nt.scale) < 0.004 &&
-        prev.squashX === nt.squashX ? prev : nt
-      );
+      // dodge course owns his position directly (same override as before)
+      if (mode === 'games' && gameSub === 'avoid' && avoidStatus === 'playing') {
+        nt.x = phys.current.avoidOliverX; nt.y = phys.current.avoidOliverY;
+      }
+      transformRef.current = nt;
+      // contact shadow follows him — direct DOM write, same formula as the JSX below
+      const sh = shadowRef.current;
+      if (sh) {
+        const lift = Math.max(0, -nt.y);
+        sh.style.left = `calc(50% + ${nt.x * 0.92}px)`;
+        sh.style.width = `${Math.max(120, (230 - lift * 0.35) * (mode === 'chase' ? P.shrink : 1))}px`;
+        sh.style.height = `${Math.max(16, 36 + nt.y * 0.03)}px`;
+        sh.style.opacity = `${Math.max(0.25, 0.85 - lift / 700)}`;
+      }
+      // chase hint arrow hovers over him until the first catch
+      const ha = hintRef.current;
+      if (ha) {
+        ha.style.left = `calc(50% + ${nt.x}px)`;
+        ha.style.top = `calc(50% + ${nt.y - oliverH * 0.62}px)`;
+      }
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, gravLevel, gameSub, catchOn, army.length, armyFollow, secretMode, balls.length, sleeping, bit16, danceOn, madUntil, giantUntil, avoidStatus, runLevel, fumingUntil]);
+  }, [mode, gravLevel, gameSub, catchOn, army.length, armyFollow, secretMode, balls.length, sleeping, bit16, danceOn, madUntil, giantUntil, avoidStatus, runLevel, fumingUntil, tamaTick]);
 
   // catch game timer
   useEffect(() => {
@@ -519,6 +586,30 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
+  // Tamagotchi-Oliver: stats decay in real time — even while you ignore him.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const T = tamagotchiRef.current!;
+      const now = Date.now();
+      const mins = (now - T.last) / 60000;
+      T.last = now;
+      T.food = Math.max(0, T.food - mins * 2.4);
+      T.fun = Math.max(0, T.fun - mins * 1.9);
+      T.clean = Math.max(0, T.clean - mins * 1.5);
+      localStorage.setItem('oliver-tama', JSON.stringify(T));
+      setTamaTick((k) => k + 1);
+      if (mode === 'tamagotchi' && !sleeping && !danceOn) {
+        const worst = Math.min(T.food, T.fun, T.clean);
+        if (worst < 18 && Math.random() < 0.35) {
+          say(rand(['FEED MEE…', 'I am but a hungry pixel…', 'this is my sad walk', 'cleaning would be NICE']), 'whisper');
+          sfx.grr();
+        }
+      }
+    }, 2000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, sleeping, danceOn]);
+
   // keyboard: space jump + OLIVER code
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -544,17 +635,25 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [bump, say, unlock]);
 
-  const burst = (region: string) => {
+  const burst = useCallback((region: string) => {
     const id = Date.now() + Math.random();
     const P = phys.current;
     const texts = region === 'head' ? POKE_PHRASES_HEAD : region === 'feet' ? POKE_PHRASES_FEET : POKE_PHRASES_BODY;
     setStars((s) => [...s.slice(-8), { id, x: P.px, y: P.py - 60, txt: `${rand(['⭐', '💥', '✨'])} ${rand(texts)}` }]);
     setTimeout(() => setStars((s) => s.filter((x) => x.id !== id)), 1600);
-  };
+  }, []);
 
-  const handleRegionClick = (region: 'glasses' | 'hair' | 'head' | 'torso' | 'feet' | 'body') => {
+  const handleRegionClick = useCallback((region: 'glasses' | 'hair' | 'head' | 'torso' | 'feet' | 'body') => {
     const P = phys.current;
     const mad = Date.now() < madUntil;
+    // Tamagotchi-Oliver: poking him while he's hungry is a cry for help
+    if (mode === 'tamagotchi') {
+      const T = tamagotchiRef.current!;
+      const worst = Math.min(T.food, T.fun, T.clean);
+      if (worst < 40) { T.fun = Math.max(0, T.fun - 3); localStorage.setItem('oliver-tama', JSON.stringify(T)); }
+      else { T.fun = Math.min(100, T.fun + 2); localStorage.setItem('oliver-tama', JSON.stringify(T)); }
+      setTamaTick((k) => k + 1);
+    }
     P.squashX = 1.22; P.squashY = 0.78; P.squashT = 12;
     // punching him: anime hit flash + impact sound
     setHitFx(Date.now());
@@ -574,6 +673,21 @@ export default function App() {
     unlock('first-contact');
 
     if (mad) { say(rand(MAD_PHRASES), 'angry'); sfx.grr(); meme('cry'); burst('head'); }
+    else if (mode === 'poke') {
+      // COOKIE POKE MODE: every jab inflates him. The more you click, the fatter.
+      const nf = fatRef.current + 0.055 + combo * 0.004;
+      setFat(nf);
+      if (nf >= 0.99 && !fatMaxedRef.current) {
+        fatMaxedRef.current = true;
+        say('OK I CAN NO LONGER HIDE IT — I AM A BALLOON OF MAN 🎈', 'announce');
+        sfx.levelup(); unlock('balloon');
+      } else if (combo === 3) say('*slurp* one more cookie…');
+      else if (combo === 6) say('okay the shirt is TIGHT now');
+      else if (combo === 10) say('I CAN FEEL MY BELAYING HATE ME');
+      else if (Math.random() < 0.2) say(rand(['that poke went STRAIGHT to my hips', 'keep going, I love snacks I mean— clicks', 'my lanyard no longer fits 😔']));
+      else if (region === 'glasses') { setGlassesPop(Date.now()); say('MY GLASSES!!'); }
+      else if (region === 'hair') { setHairBounce(Date.now()); say('BOING! MY CURLS!'); }
+    }
     else if (region === 'glasses') { setGlassesPop(Date.now()); say(rand(['MY GLASSES!!', '*adjusts glasses*', 'FOUR EYES FOREVER'])); }
     else if (region === 'hair') { setHairBounce(Date.now()); say(rand(['BOING! MY CURLS!', 'THE CURLS HAVE SPOKEN', 'DO NOT FLOOF THE FRO'])); }
     else if (region === 'head') { say(rand(POKE_PHRASES_HEAD)); burst('head'); }
@@ -605,7 +719,7 @@ export default function App() {
       say(rand(['CAUGHT! +1 🏃', 'GOT HIM!', 'TAGGED! He is faster now…', 'NO FAIR!!']));
       burst('head');
     }
-  };
+  }, [mode, tamagotchiRef, madUntil, bump, sfx, unlock, setTamaTick, setHitFx, setPokeCount, setCombo, setGlassesPop, setHairBounce, setCatchScore, setRunLevel, setCatches, setChaseBest, fatRef, fatMaxedRef, setFat, say, burst]);
 
   const onStagePointer = (e: React.PointerEvent) => {
     const r = stageRef.current?.getBoundingClientRect(); if (!r) return;
@@ -630,18 +744,18 @@ export default function App() {
   };
 
   const surpriseMe = () => {
-    const pool: ModeId[] = ['chase', 'dressup', 'sketch', 'poke', 'gravity', 'dance', 'says', 'games', 'generator', 'booth', 'army'];
+    const pool: ModeId[] = ['chase', 'dressup', 'sketch', 'poke', 'gravity', 'dance', 'tamagotchi', 'games', 'generator', 'booth', 'army'];
     const m = rand(pool);
     setMode(m); sfx.whistle(); bump(2, 10);
     if (m === 'dance') { setDanceOn(true); rickStart(); unlock('dancer'); }
     if (m === 'generator') doGenerate();
-    if (m === 'army' && army.length === 0) spawnArmy(8);
-    if (m === 'gravity') setBalls((b) => [...b, { id: Date.now(), x: -100, y: -150, vx: 3, vy: 0, c: '#FF6B5B' }]);
+    if (m === 'army' && army.length === 0) spawnArmy(8, 6500);
+    if (m === 'gravity') setBalls((b) => [...b, { id: Date.now(), x: -100, y: -150, vx: 3, vy: 0, c: '#FF6B5B', exp: Date.now() + 10000 }]);
     if (m === 'games') setGameSub(rand(['basket', 'pong', 'dash', 'whack', 'maze', 'rocket', 'flappy', 'snake', 'catch'] as GameSub[]));
     say(rand(['SURPRISE!', 'TRY THIS!', 'NEW TOY UNLOCKED!']));
   };
 
-  const doGenerate = () => {
+  const doGenerate = useCallback(() => {
     const n = pick(2, 4);
     const shuffled = [...GEAR].sort(() => Math.random() - 0.5).slice(0, n);
     setAccessories(shuffled.map((d) => ({ uid: uidCounter++, defId: d.id, dx: 0, dy: 0, scale: 1, rot: pick(-10, 10) })));
@@ -651,17 +765,56 @@ export default function App() {
     sfx.yay(); bump(2, 9);
     say(`${name}!`);
     if (n >= 4) unlock('fashion-disaster');
-  };
+  }, [bump, say, unlock]);
 
-  const spawnArmy = (n: number) => {
-    setArmy(Array.from({ length: n }, (_, i) => ({
-      id: Date.now() + i, x: pick(-200, 200), y: pick(-150, 150),
+  const spawnArmy = useCallback((n: number, ttlMs?: number) => {
+    const ids = Array.from({ length: n }, (_, i) => Date.now() + i);
+    setArmy(ids.map((id, i) => ({
+      id, x: pick(-200, 200), y: pick(-150, 150),
       vx: pick(-2, 2), vy: pick(-2, 2), s: 0.28 + Math.random() * 0.2,
     })));
+    if (ttlMs) {
+      // the clones wander off on their own — pop out one by one like they arrived
+      let k = 0;
+      const step = () => {
+        if (k >= ids.length) return;
+        const batch = ids.slice(k, k + Math.ceil(n / 8));
+        k += batch.length;
+        setArmy((a) => a.filter((x) => !batch.includes(x.id)));
+        window.setTimeout(step, ttlMs / 9);
+      };
+      window.setTimeout(step, ttlMs * 0.55);
+    }
     sfx.boing(); bump(n, 6);
-  };
+  }, [bump]);
 
-  const exportBooth = () => {
+  // Tamagotchi-Oliver actions
+  const tamaAct = useCallback((kind: 'feed' | 'play' | 'clean') => {
+    const T = tamagotchiRef.current!;
+    if (kind === 'feed') {
+      T.food = Math.min(100, T.food + 34);
+      say(rand(['NOM NOM NOM 🍪', 'the cookie is CHOICEST', '*crumbs everywhere*']));
+      sfx.coin();
+    } else if (kind === 'play') {
+      T.fun = Math.min(100, T.fun + 30);
+      T.clean = Math.max(0, T.clean - 4);
+      phys.current.vy = -9;
+      say(rand(['AGAIN! AGAIN! 🎾', 'best game EVER', 'throw it RIGHT HERE']));
+      sfx.boing();
+    } else {
+      T.clean = Math.min(100, T.clean + 40);
+      say(rand(['squeaky clean ✨', 'I EXFOLIATE', 'spa day!!']));
+      sfx.whistle();
+    }
+    T.last = Date.now();
+    localStorage.setItem('oliver-tama', JSON.stringify(T));
+    tamaHappyRef.current = Date.now();
+    setTamaTick((k) => k + 1);
+    unlock('petowner');
+    bump(1, 5);
+  }, [bump, say, unlock]);
+
+  const exportBooth = useCallback(() => {
     const cv = document.createElement('canvas');
     cv.width = 900; cv.height = 1200;
     const ctx = cv.getContext('2d')!;
@@ -722,7 +875,13 @@ export default function App() {
     };
     img.src = bit16 ? SPRITES['front-stand'] : './oliver-transparent.png';
     img.onerror = () => { img.src = './oliver-original.jpg'; };
-  };
+  }, [boothBg, genName, boothPose, bit16, accessories, stampMarks, bump, say]);
+
+  const resetChase = useCallback(() => {
+    setCatches(0); setMisses(0); setRunLevel(0);
+    phys.current.shrink = 1; phys.current.px = 0; phys.current.py = 0;
+    sfx.pop(); say('TIME! Again!');
+  }, [say]);
 
   const MODES: { id: ModeId; label: string; icon: any; color: string }[] = [
     { id: 'chase', label: 'Chase', icon: MousePointer2, color: '#B9A7F9' },
@@ -731,7 +890,7 @@ export default function App() {
     { id: 'poke', label: 'Poke', icon: Hand, color: '#FF6B5B' },
     { id: 'gravity', label: 'Gravity', icon: Rocket, color: '#2B50E0' },
     { id: 'dance', label: 'Dance', icon: PartyPopper, color: '#FF9BD2' },
-    { id: 'says', label: 'Oliver Says', icon: MessageCircle, color: '#7BE0D4' },
+    { id: 'tamagotchi', label: 'Tamagotchi', icon: Egg, color: '#7BE0D4' },
     { id: 'games', label: 'Games', icon: Gamepad2, color: '#FFB020' },
     { id: 'generator', label: 'Generator', icon: Dices, color: '#B9A7F9' },
     { id: 'booth', label: 'Booth', icon: Camera, color: '#2B50E0' },
@@ -749,6 +908,8 @@ export default function App() {
   const skin = bit16 ? 'pixel' : pose === 'cutout-photo' ? 'cutout' : 'hd';
   const madNow = Date.now() < madUntil;
   const fumingNow = Date.now() < fumingUntil;
+  const tama = tamagotchiRef.current!;
+  const tamaMood = Math.round((tama.food + tama.fun + tama.clean) / 3);
   const catchingNow = mode === 'games' && gameSub === 'catch' && catchOn;
   const NET_CURSOR = `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='56' height='56'><g stroke='%231e1b3a' stroke-width='3' fill='none'><circle cx='28' cy='20' r='16'/><path d='M12 20h32M28 4v32M16 8l24 24M40 8L16 32'/><path d='M28 36L20 52M28 36l8 16' stroke-linecap='round'/></g></svg>") 28 20, crosshair`;
   const fullGame = mode === 'games' && (gameSub === 'basket' || gameSub === 'pong' || gameSub === 'dash' || gameSub === 'whack' || gameSub === 'maze' || gameSub === 'rocket' || gameSub === 'flappy' || gameSub === 'snake');
@@ -763,7 +924,7 @@ export default function App() {
         ))}
       </div>
       {/* TOP BAR */}
-      <header className="flex items-center gap-3 px-4 py-3 flex-wrap">
+      <header className="topbar flex items-center gap-3 px-4 py-3 flex-wrap rise-in">
         <button
           onClick={() => { setLogoScatter(true); sfx.boing(); bump(1, 3); setTimeout(() => setLogoScatter(false), 900); }}
           className="font-display font-extrabold text-2xl md:text-3xl tracking-tight flex"
@@ -809,7 +970,7 @@ export default function App() {
 
       <div className="flex flex-col lg:flex-row gap-3 px-3 md:px-4 pb-3 flex-1 min-h-0">
         {/* LEFT: mode selector */}
-        <nav className="desktop-only card-pop p-3 w-48 shrink-0 flex-col gap-2 hidden lg:flex overflow-auto" style={{ maxHeight: 'calc(100vh - 170px)' }}>
+        <nav className="desktop-only card-pop panel-sheen p-3 w-48 shrink-0 flex-col gap-2 hidden lg:flex overflow-auto rise-in" style={{ maxHeight: 'calc(100vh - 170px)', animationDelay: '.05s' }}>
           <div className="font-display font-extrabold text-sm opacity-60 px-1">MODES</div>
           {MODES.map((m) => (
             <button key={m.id} onClick={() => { setMode(m.id); sfx.pop(); bump(1, 2); }}
@@ -841,6 +1002,7 @@ export default function App() {
         <main className="flex-1 min-h-0">
           <div
             ref={stageRef}
+            className="card-pop panel-sheen stage-grid relative overflow-hidden w-full rise-in"
             onPointerMove={onStagePointer}
             onPointerDown={(e) => {
               onStagePointer(e);
@@ -872,7 +1034,6 @@ export default function App() {
                 sfx.boing(); bump(1, 4);
               }
             }}
-            className="card-pop stage-grid relative overflow-hidden w-full"
             style={{
               minHeight: 480, height: 'calc(100vh - 250px)',
               background: boothBg && mode === 'booth' ? boothBg.css : undefined,
@@ -881,7 +1042,28 @@ export default function App() {
             }}
           >
             {bit16 && <BitLighting />}
-            {!bit16 && <div className="hd-stage-sweep" />}
+            {!bit16 && (
+              <>
+                <div className="hd-stage-sweep" />
+                {/* volumetric light shafts drifting across the stage */}
+                <div className="hd-godrays">
+                  <i style={{ ['--x' as any]: '8%', ['--dur' as any]: '7s', ['--delay' as any]: '0s' }} />
+                  <i style={{ ['--x' as any]: '42%', ['--dur' as any]: '9s', ['--delay' as any]: '1.6s' }} />
+                  <i style={{ ['--x' as any]: '74%', ['--dur' as any]: '8s', ['--delay' as any]: '3s' }} />
+                </div>
+                {/* floating dust motes catching the key light */}
+                <div className="hd-dust">
+                  {Array.from({ length: 16 }, (_, i) => (
+                    <i key={i} style={{
+                      ['--x' as any]: `${(i * 61.7) % 100}%`, ['--y' as any]: `${55 + ((i * 29) % 40)}%`,
+                      ['--s' as any]: `${3 + (i % 3)}px`, ['--dx' as any]: `${((i % 5) - 2) * 24}px`,
+                      ['--dur' as any]: `${9 + (i % 6) * 2}s`, ['--delay' as any]: `${(i * 0.9) % 11}s`,
+                    }} />
+                  ))}
+                </div>
+                <div className="hd-stage-vignette" />
+              </>
+            )}
             {/* full disco club when the party is on */}
             {danceOn && <DiscoFloor bit16={bit16} />}
             {/* confetti */}
@@ -988,7 +1170,14 @@ export default function App() {
             {/* gravity balls */}
             {balls.map((b) => (
               <div key={b.id} className="absolute rounded-full border-[3px] border-[#1e1b3a] no-select"
-                style={{ left: `calc(50% + ${b.x}px)`, top: `calc(50% + ${b.y}px)`, width: 34, height: 34, background: b.c, transform: 'translate(-50%,-50%)' }} />
+                style={{
+                  left: `calc(50% + ${b.x}px)`, top: `calc(50% + ${b.y}px)`, width: 34, height: 34, background: b.c, transform: 'translate(-50%,-50%)',
+                  // meltdown meteors burn out with a little fade
+                  ...(b.exp ? {
+                    opacity: Math.max(0, Math.min(1, (b.exp - Date.now()) / 700)),
+                    transition: 'opacity .25s linear',
+                  } : null),
+                }} />
             ))}
             {/* avoid-mode cursor + obstacle */}
             {mode === 'games' && gameSub === 'avoid' && avoidStatus === 'playing' && (
@@ -1014,12 +1203,10 @@ export default function App() {
               >
                 <OliverCharacter
                   skin={skin}
-                  sprite={pose}
+                  sprite={mode === 'tamagotchi' && !bit16 ? (pose === 'cutout-photo' ? 'hd-front-stand' : pose) : pose}
                   flipX={flip}
-                  transform={mode === 'games' && gameSub === 'avoid' && avoidStatus === 'playing'
-                    ? { ...transform, x: phys.current.avoidOliverX, y: phys.current.avoidOliverY }
-                    : transform}
-                  height={oliverH * (mode === 'games' && gameSub === 'catch' ? 0.62 : 1)}
+                  transformRef={transformRef}
+                  height={oliverH * (mode === 'games' && gameSub === 'catch' ? 0.62 : mode === 'tamagotchi' ? 0.78 : 1)}
                   accessories={accessories}
                   selectedUid={selectedUid}
                   onSelectAccessory={setSelectedUid}
@@ -1037,6 +1224,7 @@ export default function App() {
                   hitFx={hitFx}
                   danceActive={danceOn}
                   danceStyle={dancePreset}
+                  fat={mode === 'poke' ? fat : 0}
                   onRegionClick={handleRegionClick}
                 >
                   {mode === 'sketch' && (
@@ -1060,8 +1248,8 @@ export default function App() {
 
             {/* speech bubble */}
             {bubble && (
-              <div className={`absolute top-3 left-1/2 -translate-x-1/2 max-w-[90%] px-4 py-2 font-display font-extrabold text-center pop-in ${sayStyle === 'thought' ? 'bubble-thought relative' : ''}`}
-                style={{ ...bubbleStyle[sayStyle], zIndex: 50, fontSize: sayStyle === 'whisper' ? 13 : 17 }}>
+              <div className={`absolute top-3 left-1/2 -translate-x-1/2 max-w-[90%] px-4 py-2 font-display font-extrabold text-center pop-in ${bubble.style === 'thought' ? 'bubble-thought relative' : ''}`}
+                style={{ ...bubbleStyle[bubble.style], zIndex: 50, fontSize: bubble.style === 'whisper' ? 13 : 17 }}>
                 {bubble.text}
               </div>
             )}
@@ -1087,11 +1275,11 @@ export default function App() {
                 </div>
               </div>
             )}
-            {/* chase hint arrow until the first catch */}
+            {/* chase hint arrow until the first catch (position written by the loop) */}
             {mode === 'chase' && catches === 0 && !fullGame && (
-              <div className="absolute pop-in pointer-events-none text-center font-display font-extrabold"
+              <div ref={hintRef} className="absolute pop-in pointer-events-none text-center font-display font-extrabold"
                 style={{
-                  left: `calc(50% + ${transform.x}px)`, top: `calc(50% + ${transform.y - oliverH * 0.62}px)`,
+                  left: `calc(50% + ${transformRef.current.x}px)`, top: `calc(50% + ${transformRef.current.y - oliverH * 0.62}px)`,
                   transform: 'translate(-50%,-100%)', zIndex: 45,
                   animation: 'bounce-soft 1s ease-in-out infinite',
                 }}>
@@ -1116,10 +1304,16 @@ export default function App() {
                 </div>
               </div>
             )}
-            {/* dynamic soft shadow */}
+            {/* dynamic soft shadow — follows Oliver, shrinks and fades as he rises (driven by the loop) */}
             {!fullGame && (
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 oliver-shadow pointer-events-none"
-              style={{ width: 220 - Math.max(0, -transform.y * 0.2), height: 34, borderRadius: '50%' }} />
+              <div ref={shadowRef} className="absolute oliver-shadow pointer-events-none"
+                style={{
+                  left: `calc(50% + ${transformRef.current.x * 0.92}px)`, bottom: 24, transform: 'translateX(-50%)',
+                  width: Math.max(120, (230 - Math.max(0, -transformRef.current.y) * 0.35) * (mode === 'chase' ? phys.current.shrink : 1)),
+                  height: Math.max(16, 36 + transformRef.current.y * 0.03),
+                  opacity: Math.max(0.25, 0.85 - Math.max(0, -transformRef.current.y) / 700),
+                  borderRadius: '50%', transition: 'opacity .2s',
+                }} />
             )}
             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[11px] font-bold opacity-60 whitespace-nowrap">
               {bit16 ? '16-bit sprite sheet • pick the pose per action' : 'true transparent cutout + HD action sheet per move'}
@@ -1127,11 +1321,18 @@ export default function App() {
           </div>
 
           {/* BOTTOM TOOLBAR */}
-          <div className="card-pop mt-3 px-3 py-2.5 flex items-center gap-3 flex-wrap">
+          <div className="card-pop panel-sheen mt-3 px-3 py-2.5 flex items-center gap-3 flex-wrap rise-in" style={{ animationDelay: '.1s' }}>
             <div className="flex items-center gap-2 text-xs font-extrabold">
               <Zap size={14} /> {fumingNow ? '😤 FUMING' : 'CHAOS'}
-              <div className="w-28 md:w-40 h-3.5 bg-[#eee] border-2 border-[#1e1b3a] rounded-full overflow-hidden">
-                <div className="h-full transition-all" style={{ width: `${chaos}%`, background: fumingNow || chaos > 75 ? '#FF6B5B' : chaos > 45 ? '#FFD23F' : '#C6F24E' }} />
+              <div className="w-28 md:w-40 h-3.5 bg-[#eee] border-2 border-[#1e1b3a] rounded-full overflow-hidden" style={{ boxShadow: fumingNow || chaos > 75 ? '0 0 16px rgba(255,107,91,.6)' : undefined }}>
+                <div className="h-full transition-all duration-300" style={{
+                  width: `${chaos}%`,
+                  background: fumingNow || chaos > 75
+                    ? 'linear-gradient(90deg,#FF6B5B,#FF2B2B,#FF6B5B)'
+                    : chaos > 45 ? 'linear-gradient(90deg,#FFD23F,#FFB020,#FFD23F)' : 'linear-gradient(90deg,#C6F24E,#7BE0D4,#C6F24E)',
+                  backgroundSize: '200% 100%', animation: 'meterFlow 1.6s linear infinite',
+                  boxShadow: 'inset 0 -2px 0 rgba(0,0,0,.15), inset 0 2px 0 rgba(255,255,255,.4)',
+                }} />
               </div>
               <span>{Math.round(chaos)}%</span>
             </div>
@@ -1149,25 +1350,25 @@ export default function App() {
         </main>
 
         {/* RIGHT: context panel */}
-        <aside className="card-pop p-4 w-full lg:w-80 shrink-0 overflow-auto" style={{ maxHeight: 'calc(100vh - 170px)' }}>
+        <aside className="card-pop panel-sheen p-4 w-full lg:w-80 shrink-0 overflow-auto rise-in" style={{ maxHeight: 'calc(100vh - 170px)', animationDelay: '.15s' }}>
           <RightPanel
             mode={mode} setMode={setMode}
+            tama={tama} tamaMood={tamaMood} tamaAct={tamaAct} tick={tamaTick}
             accessories={accessories} setAccessories={setAccessories} selectedUid={selectedUid} setSelectedUid={setSelectedUid}
             tool={tool} setTool={setTool} color={color} setColor={setColor} brushW={brushW} setBrushW={setBrushW}
             stamp={stamp} setStamp={setStamp} sketchRef={sketchRef} strokes={strokes} stampMarks={stampMarks}
             danceOn={danceOn} setDanceOn={setDanceOn} dancePreset={dancePreset} setDancePreset={setDancePreset}
             gravLevel={gravLevel} setGravLevel={setGravLevel} balls={balls} setBalls={setBalls}
-            sayText={sayText} setSayText={setSayText} sayStyle={sayStyle} setSayStyle={setSayStyle}
             gameSub={gameSub} setGameSub={setGameSub}
             catchOn={catchOn} setCatchOn={setCatchOn} catchScore={catchScore} setCatchScore={setCatchScore}
             catchTime={catchTime} setCatchTime={setCatchTime} catchBest={catchBest}
             avoidOn={avoidOn} setAvoidOn={setAvoidOn} avoidStatus={avoidStatus} setAvoidStatus={setAvoidStatus} avoidTime={avoidTime} setAvoidTime={setAvoidTime}
             catches={catches} misses={misses} catchBestChase={chaseBest} runLevel={runLevel}
-            resetChase={() => { setCatches(0); setMisses(0); setRunLevel(0); phys.current.shrink = 1; phys.current.px = 0; phys.current.py = 0; sfx.pop(); say('TIME! Again!'); }}
+            resetChase={resetChase}
             genName={genName} doGenerate={doGenerate}
             boothBg={boothBg} setBoothBg={setBoothBg} boothPose={boothPose} setBoothPose={setBoothPose} exportBooth={exportBooth}
             army={army} spawnArmy={spawnArmy} setArmy={setArmy} armyFollow={armyFollow} setArmyFollow={setArmyFollow}
-            pokeCount={pokeCount} combo={combo}
+            pokeCount={pokeCount} combo={combo} fat={fat}
             bump={bump} say={say} unlock={unlock}
           />
         </aside>
@@ -1192,7 +1393,7 @@ export default function App() {
               <li>• <b>Poke</b> — punching shows the anime hit flash 💥. Chain pokes for COMBO.</li>
               <li>• <b>Gravity</b> — drag & throw Oliver; toggle gravity; launch the rocket; add balls.</li>
               <li>• <b>Dance</b> — MAKE HIM DANCE for disco + synthesized beat (starts on click, mutable).</li>
-              <li>• <b>Oliver Says</b> — type anything; pick a bubble style; SPEAK uses Puter cloud voice (system fallback).</li>
+              <li>• <b>Tamagotchi-Oliver</b> — a 1997 pocket Oliver. Stats decay in REAL TIME (even with the tab closed). Feed 🍪 play  scrub 🧼 before he despawns.</li>
               <li>• <b>Games</b> — Catch, Dodge, Hoops, Pong, Dash, Whack, Maze (3 depths), Rocket, Flappy, Snake.</li>
               <li>• <b>GO 16-BIT</b> — whole UI + pixel sprite sheet + torch lighting. HD mode uses the realistic action sheet per move.</li>
               <li>• Fill CHAOS and Oliver gets MAD — a different meltdown every time 😡</li>
@@ -1271,9 +1472,13 @@ export default function App() {
           onToggleBit={() => { setBit16(!bit16); bump(1, 2); }}
           onEnter={() => {
             setEntered(true);
-            setSoundAsk(true);
+            setIntroPlaying(true);
           }}
         />
+      )}
+      {/* intro cinematic plays over the board; sound consent waits for it */}
+      {introPlaying && (
+        <IntroCinematic bit16={bit16} onDone={() => { setIntroPlaying(false); setSoundAsk(true); }} />
       )}
     </div>
   );
@@ -1303,7 +1508,7 @@ function ScurryRow() {
 }
 
 // ---------- RIGHT PANEL ----------
-function RightPanel(props: any) {
+const RightPanel = React.memo(function RightPanel(props: any) {
   const { mode } = props;
   const H = (t: string) => <div className="font-display font-extrabold text-lg mb-1">{t}</div>;
   const Sub = (t: string) => <div className="text-xs font-bold opacity-60 mb-2">{t}</div>;
@@ -1403,10 +1608,22 @@ function RightPanel(props: any) {
   );
 
   if (mode === 'poke') return (
-    <div>{H('Poke Mode 👉')}{Sub('Head, torso and feet react differently. Fast repeated pokes build COMBO.')}
+    <div>{H('Cookie Poke 🍪')}{Sub('Poke fast and he inflates like a balloon — stop clicking and he slowly deflates back.')}
       <div className="card-pop !rounded-2xl p-3 text-center" style={{ background: '#FFE9EC' }}>
         <div className="font-display font-extrabold text-3xl">{props.pokeCount}</div>
         <div className="text-xs font-extrabold">TOTAL POKES {props.combo > 1 && `• COMBO x${props.combo} 🔥`}</div>
+        <div className="mt-2 h-3.5 bg-white border-2 border-[#1e1b3a] rounded-full overflow-hidden">
+          <div className="h-full rounded-full" style={{
+            width: `${Math.round((props.fat ?? 0) * 100)}%`, transition: 'width .2s ease-out',
+            background: 'linear-gradient(90deg,#FFB020,#FF6B5B,#B9A7F9)', backgroundSize: '200% 100%',
+            animation: 'meterFlow 1.6s linear infinite',
+          }} />
+        </div>
+        <div className="text-[11px] font-extrabold mt-1">
+          {(props.fat ?? 0) >= 0.99 ? '🎈 MAXIMUM OLIVER — he has become a balloon'
+            : (props.fat ?? 0) > 0.5 ? '🍩 getting doughy…'
+            : (props.fat ?? 0) > 0.25 ? '🫧 slightly puffed' : '😐 normal air levels'}
+        </div>
       </div>
       <div className="text-xs font-bold mt-2 opacity-70">Tip: try the glasses and the curls — they have secrets. 20 pokes earns Professional Menace.</div>
     </div>
@@ -1429,7 +1646,7 @@ function RightPanel(props: any) {
         window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
       }} className="btn-3d bg-[#FF6B5B] text-white border-2 border-[#1e1b3a] px-4 py-2.5 mt-3 w-full font-display font-extrabold">🚀 ROCKET LAUNCH (SPACE)</button>
       <button onClick={() => {
-        props.setBalls((b: any[]) => [...b.slice(-11), { id: Date.now(), x: pick(-180, 180), y: -180, vx: pick(-3, 3), vy: 0, c: rand(['#B9A7F9', '#2B50E0', '#C6F24E', '#FF6B5B', '#FFD23F']) }]);
+        props.setBalls((b: any[]) => [...b.slice(-11), { id: Date.now(), x: pick(-180, 180), y: -180, vx: pick(-3, 3), vy: 0, c: rand(['#B9A7F9', '#2B50E0', '#C6F24E', '#FF6B5B', '#FFD23F']), exp: Date.now() + 9000 }]);
         sfx.pop(); props.bump(1, 3);
       }} className="btn-3d bg-[#C6F24E] border-2 border-[#1e1b3a] px-4 py-2 mt-2 w-full font-extrabold text-sm">＋ SPAWN BOUNCY BALL</button>
       <button onClick={() => props.setBalls([])} className="btn-3d bg-white border-2 border-[#1e1b3a] px-4 py-2 mt-2 w-full text-xs font-extrabold">CLEAR BALLS ({props.balls.length})</button>
@@ -1458,27 +1675,47 @@ function RightPanel(props: any) {
     </div>
   );
 
-  if (mode === 'says') return (
-    <div>{H('Oliver Says 💬')}{Sub('Arbitrary text in a bubble anchored to Oliver. Optional standard system voice — never cloned.')}
-      <textarea value={props.sayText} onChange={(e) => props.setSayText(e.target.value)} rows={3} maxLength={140}
-        className="w-full border-[3px] border-[#1e1b3a] rounded-2xl p-3 text-sm font-bold" placeholder="Make Oliver say anything…" />
-      <div className="flex gap-1.5 flex-wrap mt-2">
-        {(['normal', 'angry', 'whisper', 'announce', 'thought'] as const).map((s) => (
-          <button key={s} onClick={() => props.setSayStyle(s)} className={`btn-3d border-2 border-[#1e1b3a] px-3 py-1 text-xs font-extrabold ${props.sayStyle === s ? 'bg-[#1e1b3a] text-white' : 'bg-white'}`}>{s}</button>
-        ))}
+  if (mode === 'tamagotchi') {
+    const T = props.tama as { food: number; fun: number; clean: number };
+    const mood = props.tamaMood as number;
+    void props.tick; // re-render on decay
+    const stat = (label: string, icon: string, v: number) => (
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-lg w-7 text-center">{icon}</span>
+        <div className="flex-1">
+          <div className="flex justify-between text-[10px] font-extrabold"><span>{label}</span><span>{Math.round(v)}%</span></div>
+          <div className="h-3 bg-[#eee] border-2 border-[#1e1b3a] rounded-full overflow-hidden">
+            <div className="h-full transition-all duration-500" style={{
+              width: `${v}%`, borderRadius: 999,
+              background: v > 60 ? '#C6F24E' : v > 30 ? '#FFD23F' : '#FF6B5B',
+              boxShadow: v <= 30 ? '0 0 10px rgba(255,107,91,.8)' : undefined,
+            }} />
+          </div>
+        </div>
       </div>
-      <div className="flex gap-2 mt-3">
-        <button onClick={() => { props.say(props.sayText || '…', props.sayStyle); sfx.pop(); props.bump(1, 3); }} className="btn-3d bg-[#2B50E0] text-white border-2 border-[#1e1b3a] px-4 py-2 flex-1 font-extrabold text-sm">SHOW BUBBLE</button>
-        <button onClick={async () => {
-          props.say(props.sayText || '…', props.sayStyle); props.bump(1, 4);
-          const { speak: voice } = await import('./lib/voice');
-          const ok = await voice(props.sayText || 'Hello!');
-          if (!ok) props.say('(voice unavailable — bubble only)');
-        }} className="btn-3d bg-[#C6F24E] border-2 border-[#1e1b3a] px-4 py-2 flex-1 font-extrabold text-sm">🔊 SPEAK (PUTER)</button>
+    );
+    return (
+      <div>{H('Tamagotchi-Oliver 🐣')}{Sub('A pocket Oliver from 1997. His stats decay in REAL TIME — even when you close the tab. Neglect him at your own risk.')}
+        <div className="card-pop !rounded-2xl p-3 mb-2 text-center" style={{ background: 'linear-gradient(180deg,#0d0a2e,#201a5c)', border: '3px solid #7BE0D4' }}>
+          <div style={{ fontFamily: '"Press Start 2P", monospace', fontSize: 10, color: '#7BE0D4', textShadow: '0 0 8px #7BE0D4' }}>
+            MOOD: {mood >= 75 ? 'ECSTATIC' : mood >= 55 ? 'CHILL' : mood >= 30 ? 'SUS' : 'DESPERATE'}
+          </div>
+          <div className="font-display font-extrabold text-2xl mt-1" style={{ color: mood >= 55 ? '#C6F24E' : '#FF6B5B', textShadow: '2px 2px 0 #000' }}>
+            {mood >= 75 ? '◕‿◕ ' : mood >= 55 ? '◕◕' : mood >= 30 ? '◕_◕?' : '╥﹏╥'}
+          </div>
+        </div>
+        {stat('FULLNESS', '🍪', T.food)}
+        {stat('FUN', '🎾', T.fun)}
+        {stat('HYGIENE', '🧼', T.clean)}
+        <div className="grid grid-cols-3 gap-1.5 mt-3">
+          <button onClick={() => props.tamaAct('feed')} className="btn-3d bg-[#FFD23F] border-2 border-[#1e1b3a] py-2 text-xs font-extrabold">🍪 FEED</button>
+          <button onClick={() => props.tamaAct('play')} className="btn-3d bg-[#B9A7F9] border-2 border-[#1e1b3a] py-2 text-xs font-extrabold">🎾 PLAY</button>
+          <button onClick={() => props.tamaAct('clean')} className="btn-3d bg-[#7BE0D4] border-2 border-[#1e1b3a] py-2 text-xs font-extrabold">🧼 SCRUB</button>
+        </div>
+        <div className="text-[11px] font-bold opacity-70 mt-2">Shake a cookie near him and he WILL chase it. Keep him alive 60s for Certified Oliver Owner 🐣</div>
       </div>
-      <div className="text-[11px] font-bold opacity-60 mt-1">Voice: Puter.js cloud TTS, falls back to system voice.</div>
-    </div>
-  );
+    );
+  }
 
   if (mode === 'games') return (
     <div>{H('Mini Games 🎮')}{Sub('Complete loops: start → play → score → game over → retry.')}
@@ -1588,7 +1825,7 @@ function RightPanel(props: any) {
   if (mode === 'army') return (
     <div>{H('Oliver Army 🪖')}{Sub('Mini Olivers wander, follow your cursor and bump around.')}
       <div className="flex gap-2">
-        <button onClick={() => props.spawnArmy(5)} className="btn-3d bg-[#C6F24E] border-2 border-[#1e1b3a] px-3 py-2 flex-1 text-xs font-extrabold">+ 5 OLIVERS</button>
+        <button onClick={() => props.spawnArmy(5, 7000)} className="btn-3d bg-[#C6F24E] border-2 border-[#1e1b3a] px-3 py-2 flex-1 text-xs font-extrabold">+ 5 OLIVERS</button>
         <button onClick={() => props.setArmy([])} className="btn-3d bg-white border-2 border-[#1e1b3a] px-3 py-2 flex-1 text-xs font-extrabold">DISMISS</button>
       </div>
       <button onClick={() => props.setArmyFollow(!props.armyFollow)} className="btn-3d bg-white border-2 border-[#1e1b3a] px-3 py-2 mt-2 w-full text-xs font-extrabold">
@@ -1599,7 +1836,7 @@ function RightPanel(props: any) {
   );
 
   return null;
-}
+});
 
 // make rand available to panel
 function rand<T>(a: T[]): T { return a[Math.floor(Math.random() * a.length)]; }

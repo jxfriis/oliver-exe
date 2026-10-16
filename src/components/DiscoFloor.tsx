@@ -1,8 +1,8 @@
-// Full disco treatment: light-up dance floor, the MIRROR BALL,
+import React from 'react';
 // sweeping spotlights, laser beams and color-wash ambience.
 import DiscoBall from './DiscoBall';
 
-export default function DiscoFloor({ bit16 }: { bit16: boolean }) {
+function DiscoFloor({ bit16 }: { bit16: boolean }) {
   const tiles = Array.from({ length: 48 }, (_, i) => i);
   const tileColors = ['#FF6B5B', '#FFD23F', '#C6F24E', '#2B50E0', '#B9A7F9', '#FF9BD2'];
   const beams = [
@@ -15,6 +15,9 @@ export default function DiscoFloor({ bit16 }: { bit16: boolean }) {
     <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 4 }}>
       {/* color wash */}
       <div className="absolute inset-0 disco-animate" style={{ background: 'linear-gradient(135deg, rgba(185,167,249,.4), rgba(255,107,91,.3), rgba(198,242,78,.3))' }} />
+      {/* smoky haze so the beams have something to cut through — oversized layer
+          drifting on transform (identical look, zero repaint) */}
+      <div className="absolute" style={{ inset: -160, opacity: .5, backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='h'><feTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='3'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .5 0'/></filter><rect width='300' height='300' filter='url(%23h)'/></svg>\")", mixBlendMode: 'soft-light', animation: 'hazeDrift 18s ease-in-out infinite alternate', willChange: 'transform' }} />
       {/* dance floor */}
       <div className="absolute inset-x-0 bottom-0" style={{ height: '26%', perspective: 300 }}>
         <div className="absolute inset-0 grid grid-cols-8 grid-rows-3 gap-1 p-2" style={{ transform: 'rotateX(18deg) scaleY(1.15)', transformOrigin: 'bottom' }}>
@@ -30,15 +33,23 @@ export default function DiscoFloor({ bit16 }: { bit16: boolean }) {
         </div>
         <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, transparent 30%, rgba(0,0,0,.45))' }} />
       </div>
-      {/* spotlights */}
+      {/* spotlights — wider cones with a bright source flare at the top */}
       {beams.map((b, i) => (
         <div key={i} className="absolute top-0" style={{
-          left: b.left, width: 90, height: '75%',
-          background: `linear-gradient(180deg, ${b.color}cc, ${b.color}22 70%, transparent)`,
-          clipPath: 'polygon(38% 0, 62% 0, 100% 100%, 0% 100%)',
+          left: b.left, width: 130, height: '82%',
+          background: `linear-gradient(180deg, ${b.color}dd, ${b.color}33 55%, transparent 85%)`,
+          clipPath: 'polygon(42% 0, 58% 0, 100% 100%, 0% 100%)',
           transformOrigin: 'top center',
           animation: `beamSway ${b.dur} ease-in-out ${b.delay} infinite alternate`,
-          mixBlendMode: 'screen', opacity: 0.8,
+          mixBlendMode: 'screen', opacity: 0.85, filter: 'blur(1px)',
+        }} />
+      ))}
+      {beams.map((b, i) => (
+        <div key={`fx${i}`} className="absolute top-1 rounded-full" style={{
+          left: `calc(${b.left} + 52px)`, width: 26, height: 26,
+          background: `radial-gradient(circle, #fff, ${b.color} 55%, transparent 75%)`,
+          boxShadow: `0 0 30px ${b.color}`, mixBlendMode: 'screen',
+          animation: `sourcePulse ${b.dur} ease-in-out ${b.delay} infinite alternate`,
         }} />
       ))}
       {/* THE mirror ball */}
@@ -51,6 +62,8 @@ export default function DiscoFloor({ bit16 }: { bit16: boolean }) {
       <style>{`
         @keyframes tileBlink { 0%,100%{ opacity:.25;} 50%{ opacity:.85;} }
         @keyframes beamSway { from{ transform: rotate(-16deg);} to{ transform: rotate(16deg);} }
+        @keyframes sourcePulse { from{ opacity:.6; transform: scale(.9);} to{ opacity:1; transform: scale(1.15);} }
+        @keyframes hazeDrift { from{ transform: translate(0,0);} to{ transform: translate(140px,60px);} }
         @keyframes ballSpin { to { filter: hue-rotate(360deg); } }
         @keyframes sparkOrbit { from{ transform: translate(0,0) scale(.4); opacity:0;} 30%{opacity:1;} to{ transform: translate(var(--ox), var(--oy)) scale(1.1); opacity:0;} }
         @keyframes laser1 { 0%{ transform: translateY(0) rotate(-4deg);} 50%{ transform: translateY(60px) rotate(3deg);} 100%{ transform: translateY(0) rotate(-4deg);} }
@@ -59,3 +72,4 @@ export default function DiscoFloor({ bit16 }: { bit16: boolean }) {
     </div>
   );
 }
+export default React.memo(DiscoFloor);

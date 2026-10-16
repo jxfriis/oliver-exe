@@ -16,7 +16,16 @@ export type SpriteId =
   | 'sleep-16'         // tucked in bed sleeping — idle sleep (16-bit)
   | 'snake-16'         // snake form — snake game head (16-bit)
   | 'face-happy'       // giant happy face — catch target, pong ball, cheers
-  | 'face-angry';      // giant angry face — meltdowns, whack penalty, mad Oliver
+  | 'face-angry'       // giant angry face — meltdowns, whack penalty, mad Oliver
+  | 'banana-slip'      // mid-air panic after slipping on a banana — comedy falls
+  | 'laugh-tears'      // crying with laughter — wins & trolling
+  | 'confused-scratch' // scratching head, lost — confused moments
+  | 'confetti-jump'    // arms up under confetti — celebrations
+  | 'facepalm'         // hand over face — second-hand embarrassment
+  | 'panic-claw'       // hands up, sweating — fear / danger
+  | 'flex'             // double biceps flex — power / boss energy
+  | 'screen-kiss'      // smooching the screen, drool — HD intro finale
+  | 'smooch';          // love-struck: heart eyes, reaching hug — sees YOU (intro)
 
 export const SPRITES: Record<SpriteId, string> = {
   'front-stand': './sprites/oliver-front-stand.png',
@@ -35,6 +44,15 @@ export const SPRITES: Record<SpriteId, string> = {
   'snake-16': './sprites/oliver-snake-16.png',
   'face-happy': './sprites/oliver-face-happy.png',
   'face-angry': './sprites/oliver-face-angry.png',
+  'banana-slip': './sprites/oliver-banana-slip.png',
+  'laugh-tears': './sprites/oliver-laugh-tears.png',
+  'confused-scratch': './sprites/oliver-confused-scratch.png',
+  'confetti-jump': './sprites/oliver-confetti-jump.png',
+  'facepalm': './sprites/oliver-facepalm.png',
+  'panic-claw': './sprites/oliver-panic-claw.png',
+  'flex': './sprites/oliver-flex.png',
+  'screen-kiss': './sprites/oliver-screen-kiss.png',
+  'smooch': './sprites/oliver-smooch.png',
 };
 
 export const HD_CUTOUT = './oliver-transparent.png';
@@ -57,7 +75,9 @@ export type HdSpriteId =
   | 'hd-snake'           // snake form — snake game head (realistic)
   | 'hd-face-angry'    // furious face — meltdowns, mad badge
   | 'hd-face-happy'    // big grin — catch target, wins
-  | 'hd-sleep';        // lying on side, napping — idle sleep
+  | 'hd-sleep'         // lying on side, napping — idle sleep
+  | 'hd-fat'           // cookie-poke stage 1 — visibly rounder
+  | 'hd-fat-max';      // cookie-poke max — fully inflated Oliver
 
 export const HD_SPRITES: Record<HdSpriteId, string> = {
   'hd-front-stand': './sprites-hd/oliver-hd-front-stand.png',
@@ -75,6 +95,8 @@ export const HD_SPRITES: Record<HdSpriteId, string> = {
   'hd-face-angry': './sprites-hd/oliver-hd-face-angry.png',
   'hd-face-happy': './sprites-hd/oliver-hd-face-happy.png',
   'hd-sleep': './sprites-hd/oliver-hd-sleep.png',
+  'hd-fat': './sprites-hd/oliver-hd-fat.png',
+  'hd-fat-max': './sprites-hd/oliver-hd-fat-max.png',
 };
 
 export type AnySprite = SpriteId | HdSpriteId;
