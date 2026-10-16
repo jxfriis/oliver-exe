@@ -1,0 +1,14 @@
+# dependencies
+node_modules/
+
+# build output (deployed via Actions artifact, never committed)
+dist/
+
+# logs + OS junk
+*.log
+.DS_Store
+Thumbs.db
+
+# local env
+.env
+.env.local
