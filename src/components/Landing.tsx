@@ -130,32 +130,32 @@ function Landing({ bit16, onToggleBit, onEnter, onPlay3d }: {
             }} />
         </div>
       </div>
-      {/* theme switch */}
+      {/* look switcher: HD / 16-BIT → 3D */}
       {!walking && (
-        <button onClick={onToggleBit}
-          className="absolute font-display"
-          style={{
-            top: 16, right: 16, zIndex: 5, cursor: 'pointer',
-            fontSize: 11, color: '#C6F24E', background: '#191448',
-            border: '3px solid #C6F24E', borderRadius: 8, padding: '10px 14px',
-            boxShadow: '0 4px 0 #000, 0 0 18px rgba(198,242,78,.5)',
-          }}>
-          {bit16 ? '▶ HD MODE' : '▶ 16-BIT'}
-        </button>
-      )}
-      {/* 3D world portal */}
-      {!walking && (
-        <button onClick={onPlay3d}
-          className="absolute font-display"
-          style={{
-            top: 64, right: 16, zIndex: 5, cursor: 'pointer',
-            fontSize: 11, color: '#05031a', background: '#B9A7F9',
-            border: '3px solid #05031a', borderRadius: 8, padding: '10px 14px',
-            boxShadow: '0 4px 0 #000, 0 0 22px rgba(185,167,249,.75)',
-            animation: 'portalPulse 2.4s ease-in-out infinite',
-          }}>
-          ▶ 3D WORLD
-        </button>
+        <div className="absolute flex items-center gap-2 flex-wrap justify-end"
+          style={{ top: 16, right: 16, zIndex: 5, maxWidth: 'calc(100vw - 32px)' }}>
+          <button onClick={onToggleBit}
+            className="font-display"
+            style={{
+              cursor: 'pointer',
+              fontSize: 11, color: '#C6F24E', background: '#191448',
+              border: '3px solid #C6F24E', borderRadius: 8, padding: '10px 14px',
+              boxShadow: '0 4px 0 #000, 0 0 18px rgba(198,242,78,.5)',
+            }}>
+            {bit16 ? '▶ HD MODE' : '▶ 16-BIT'}
+          </button>
+          <button onClick={onPlay3d}
+            className="font-display"
+            style={{
+              cursor: 'pointer',
+              fontSize: 11, color: '#05031a', background: '#B9A7F9',
+              border: '3px solid #05031a', borderRadius: 8, padding: '10px 14px',
+              boxShadow: '0 4px 0 #000, 0 0 22px rgba(185,167,249,.75)',
+              animation: 'portalPulse 2.4s ease-in-out infinite',
+            }}>
+            ▶ 3D WORLD
+          </button>
+        </div>
       )}
       {/* the one button */}
       {!walking && (
