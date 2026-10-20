@@ -224,3 +224,71 @@ img { -webkit-user-drag: none; }
   background: linear-gradient(to bottom, rgba(255,255,255,.65), rgba(255,255,255,0));
   border-radius: 9999px; pointer-events:none;
 }
+
+/* ============ 3D WORLD PORTAL ============ */
+.threePortal {
+  position: fixed; inset: 0; z-index: 600;
+  display: flex; flex-direction: column;
+  background: #05031a;
+  animation: threeIn .45s cubic-bezier(.18,.9,.26,1.12) both;
+  will-change: transform, opacity;
+}
+.threePortalOut { animation: threeOut .36s ease-in both; }
+.threeBar {
+  height: 48px; flex: 0 0 48px;
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 14px;
+  background: linear-gradient(90deg, #191448, #2b1a5e 46%, #191448);
+  border-bottom: 2px solid #C6F24E;
+  box-shadow: 0 0 26px rgba(198, 242, 78, .26), inset 0 -1px 0 rgba(255,255,255,.08);
+  color: #fff; font-family: "Baloo 2", "Nunito", sans-serif;
+  font-weight: 800; font-size: 12px; letter-spacing: .07em;
+  position: relative; z-index: 2;
+}
+.threeBarBrand { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.threeBarBrand b { color: #C6F24E; }
+.threeDot {
+  width: 9px; height: 9px; border-radius: 50%; background: #C6F24E;
+  box-shadow: 0 0 12px #C6F24E, 0 0 26px rgba(198,242,78,.8);
+  animation: threePulse 1.5s ease-in-out infinite;
+}
+.threeBarHint {
+  flex: 1; text-align: center; opacity: .62; font-size: 11px;
+  letter-spacing: .035em; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.threeBack {
+  cursor: pointer; border: 2px solid #1e1b3a; border-radius: 10px;
+  background: #FF6B5B; color: #fff; font-family: "Baloo 2", "Nunito", sans-serif;
+  font-weight: 800; font-size: 11px; letter-spacing: .06em;
+  padding: 8px 14px; box-shadow: 0 4px 0 #000, 0 0 18px rgba(255,107,91,.35);
+  transition: transform .12s ease, box-shadow .12s ease; white-space: nowrap;
+}
+.threeBack:hover { transform: translateY(-1px); box-shadow: 0 5px 0 #000, 0 0 24px rgba(255,107,91,.55); }
+.threeBack:active { transform: translateY(3px); box-shadow: 0 1px 0 #000; }
+.threeFrameWrap { position: relative; flex: 1 1 auto; min-height: 0; background: #05031a; }
+.threeFrame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: #05031a; }
+.threeLoader {
+  position: absolute; inset: 0; z-index: 3;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px;
+  background: radial-gradient(circle at 50% 44%, #2b1a5e 0%, #120d2c 45%, #05031a 72%);
+  color: #fff; font-family: "Baloo 2", "Nunito", sans-serif;
+}
+.threePortalRing { width: 96px; height: 96px; position: relative; filter: drop-shadow(0 0 18px rgba(185,167,249,.55)); }
+.threePortalRing i { position: absolute; inset: 0; border-radius: 50%; border: 3px solid transparent; }
+.threePortalRing i:nth-child(1) { border-top-color: #C6F24E; border-right-color: #C6F24E66; animation: threeSpin 1.05s linear infinite; }
+.threePortalRing i:nth-child(2) { inset: 10px; border-right-color: #B9A7F9; border-bottom-color: #B9A7F955; animation: threeSpin 1.55s linear infinite reverse; }
+.threePortalRing i:nth-child(3) { inset: 20px; border-bottom-color: #FF6B5B; animation: threeSpin .85s linear infinite; }
+.threeLoaderTitle { font-size: 13px; font-weight: 800; letter-spacing: .16em; color: #C6F24E; text-shadow: 0 0 18px rgba(198,242,78,.5); }
+.threeLoaderTrack { width: min(280px, 62vw); height: 9px; border: 2px solid #C6F24E; border-radius: 99px; padding: 1px; box-shadow: 0 0 18px rgba(198,242,78,.25); }
+.threeLoaderTrack i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #B9A7F9, #C6F24E 60%, #FFD23F); transition: width .18s ease; }
+.threeLoaderPct { font-size: 11px; font-weight: 800; letter-spacing: .18em; opacity: .65; }
+@keyframes threeIn { from { opacity: 0; transform: scale(1.035); } to { opacity: 1; transform: scale(1); } }
+@keyframes threeOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(1.03); } }
+@keyframes threePulse { 0%,100% { opacity: .62; transform: scale(.9); } 50% { opacity: 1; transform: scale(1.18); } }
+@keyframes threeSpin { to { transform: rotate(360deg); } }
+@media (max-width: 720px) {
+  .threeBar { height: 42px; flex-basis: 42px; gap: 8px; padding: 0 9px; font-size: 10px; }
+  .threeBarHint { display: none; }
+  .threeBack { padding: 6px 9px; font-size: 9.5px; }
+  .threeBarBrand b { display: none; }
+}

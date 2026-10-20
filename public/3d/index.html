@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="theme-color" content="#0b0d18" />
+<title>OLIVER.EXE — One Oliver. Infinite possibilities.</title>
+<link rel="icon" href="./oliver-avatar.png" />
+  <script type="module" crossorigin src="./assets/index-CXe3IPCO.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-vo4wrYiI.css">
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div class="grade" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+<div id="flash" aria-hidden="true"></div>
+
+<div id="loader">
+  <div class="loaderInner">
+    <div class="loaderMark">OLIVER<span>.EXE</span></div>
+    <div class="loaderBar"><i id="loaderFill"></i></div>
+    <div class="loaderText" id="loaderText">WARMING UP THE ISLAND</div>
+  </div>
+</div>
+
+<!-- ================= LANDING ================= -->
+<section id="landing">
+  <div class="landingGlow"></div>
+  <div class="landingTop">
+    <div class="miniBrand"><span class="dot"></span> OLIVER.EXE <em>3D</em></div>
+    <button id="landingSound" class="ghostBtn" aria-label="Toggle sound">
+      <span class="sndIcon">◕</span><span id="landingSoundLabel">SOUND OFF</span>
+    </button>
+  </div>
+
+  <div class="hero">
+    <div class="kicker"><i></i> A PLAYABLE 3D PLAYGROUND</div>
+    <h1 class="title">
+      <span class="titleLine">OLIVER</span><span class="titleExe">.EXE</span>
+      <span class="titleShadow" aria-hidden="true">OLIVER.EXE</span>
+    </h1>
+    <p class="tagline">ONE OLIVER. <b>INFINITE POSSIBILITIES.</b></p>
+    <p class="blurb">Curly hair. Big glasses. Purple lanyard. A whole floating island to run, jump, hoop, dance and cause a little chaos on.</p>
+
+    <div class="enterRow">
+      <button id="enterBtn" class="enterBtn">
+        <span class="enterGlow"></span>
+        <span class="enterLabel">ENTER THE ISLAND</span>
+        <span class="enterArrow">→</span>
+      </button>
+      <div class="enterNote">
+        <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move</span>
+        <span><kbd>SPACE</kbd> jump</span>
+        <span><kbd>DRAG</kbd> look</span>
+      </div>
+    </div>
+
+    <div class="heroStats">
+      <div><b id="heroVibes">0</b><span>VIBES BANKED</span></div>
+      <div><b id="heroBadges">0</b><span>BADGES FOUND</span></div>
+      <div><b>5</b><span>THINGS TO DO</span></div>
+    </div>
+  </div>
+
+  <div class="landingFoot">
+    <span>BUILT WITH THREE.JS</span>
+    <span class="footTick">●</span>
+    <span>RUNS IN YOUR BROWSER</span>
+    <span class="footTick">●</span>
+    <span>NO DOWNLOAD</span>
+  </div>
+</section>
+
+<!-- ================= HUD ================= -->
+<div id="hud">
+  <header class="topbar">
+    <div class="brand">
+      <div class="avatarWrap"><img src="./oliver-avatar.png" alt="Oliver" /></div>
+      <div class="brandCopy">
+        <div class="brandName">OLIVER<span>.EXE</span> <em>3D</em></div>
+        <div class="brandSub"><span id="modeTag">ISLAND ONLINE</span> <i>·</i> <b id="fpsTag">60 FPS</b></div>
+      </div>
+    </div>
+
+    <div class="topMid">
+      <div class="vibePill" id="vibePill">
+        <span class="vibeDiamond">◆</span>
+        <b id="vibeCount">0</b>
+        <span class="vibeLabel">VIBES</span>
+      </div>
+      <div class="comboPill" id="comboPill"><b id="comboCount">x1</b><span>FLOW</span></div>
+    </div>
+
+    <div class="topActions">
+      <button class="iconBtn" id="soundBtn" title="Sound (M)" aria-label="Sound"><span id="soundIcon">♪</span></button>
+      <button class="iconBtn" id="photoBtn" title="Take a photo (P)" aria-label="Photo">◎</button>
+      <button class="iconBtn" id="badgeBtn" title="Badges (B)" aria-label="Badges">★<i id="badgeDot"></i></button>
+      <button class="iconBtn" id="helpBtn" title="How to play (H)" aria-label="Help">?</button>
+    </div>
+  </header>
+
+  <aside class="objectives" id="objectives">
+    <div class="objHead"><span class="pulseDot"></span> TODAY'S LIST <b id="objDone">0/5</b></div>
+    <ul id="objList">
+      <li data-obj="vibes"><i></i><span>Collect <b>10 vibes</b></span><em>0/10</em></li>
+      <li data-obj="hoops"><i></i><span>Score a <b>bucket</b></span><em>0/1</em></li>
+      <li data-obj="arcade"><i></i><span>Play <b>3 arcade games</b></span><em>0/3</em></li>
+      <li data-obj="dance"><i></i><span>Dance for <b>10s</b></span><em>0s</em></li>
+      <li data-obj="photo"><i></i><span>Take a <b>photo</b></span><em>0/1</em></li>
+    </ul>
+  </aside>
+
+  <div class="controls" id="controls">
+    <span><kbd>WASD</kbd> move</span>
+    <span><kbd>SHIFT</kbd> sprint</span>
+    <span><kbd>SPACE</kbd> jump</span>
+    <span><kbd>E</kbd> interact</span>
+    <span><kbd>F</kbd> dance</span>
+    <span><kbd>M</kbd> mute</span>
+  </div>
+
+  <div class="speedLines" id="speedLines" aria-hidden="true"></div>
+
+  <div class="prompt" id="prompt">
+    <span class="promptKey" id="promptKey">E</span>
+    <span class="promptText" id="promptText">DANCE</span>
+  </div>
+
+  <div class="bubble" id="bubble">
+    <div class="bubbleText" id="bubbleText">Hi! I'm Oliver. Click me!</div>
+    <div class="bubbleTail"></div>
+  </div>
+
+  <div class="meter" id="meter">
+    <div class="meterHead"><span id="meterLabel">POWER</span><b id="meterValue">0%</b></div>
+    <div class="meterTrack"><i id="meterFill"></i><span class="meterSweet" id="meterSweet"></span></div>
+    <div class="meterHint" id="meterHint">HOLD, RELEASE AT THE GOLD LINE</div>
+  </div>
+
+  <div class="danceHud" id="danceHud">
+    <div class="danceTopRow">
+      <div class="beatRow"><i></i><i></i><i></i><i></i></div>
+      <div class="danceLabel"><span class="beatPulse" id="beatPulse"></span> DANCE FLOOR <b id="danceTime">0.0s / 10s</b></div>
+    </div>
+    <div class="nowPlaying">NOW PLAYING <b>NEVER GONNA GIVE YOU UP</b> <span>♪</span></div>
+  </div>
+
+  <div class="hoopsHud" id="hoopsHud">
+    <div class="hoopScore"><span>BUCKETS</span><b id="hoopScore">0</b></div>
+    <div class="hoopStreak" id="hoopStreak">HOLD <kbd>SPACE</kbd> TO CHARGE</div>
+  </div>
+
+  <div class="toasts" id="toasts"></div>
+
+  <div class="hintToast" id="hintToast"></div>
+
+  <div class="touchControls" id="touchControls">
+    <div class="joystick" id="joystick"><div class="stick" id="stick"></div></div>
+    <div class="touchRight">
+      <button class="touchBtn small" id="touchE">E</button>
+      <button class="touchBtn" id="touchJump">↥</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ARCADE ================= -->
+<div id="arcadeOverlay">
+  <div class="arcadeShell">
+    <header class="arcadeHead">
+      <div class="arcadeTitleWrap">
+        <span class="arcadeKicker">OLIVER ARCADE <i>8 GAMES</i></span>
+        <h2 id="arcadeTitle">ROCKET OLIVER</h2>
+      </div>
+      <div class="arcadeStats">
+        <div><span>SCORE</span><b id="arcadeScore">0</b></div>
+        <div><span>BEST</span><b id="arcadeBest">0</b></div>
+      </div>
+      <button id="arcadeClose" class="arcadeClose" aria-label="Exit arcade">✕</button>
+    </header>
+    <div class="arcadeChips" id="arcadeChips"></div>
+    <div class="arcadeScreenWrap">
+      <canvas id="arcadeCanvas" width="960" height="600"></canvas>
+      <div class="arcadeScan" aria-hidden="true"></div>
+      <div class="arcadeVignette" aria-hidden="true"></div>
+    </div>
+    <footer class="arcadeFoot">
+      <span id="arcadeControls">W / S or ↑ / ↓ to fly · collect cookies · dodge rocks</span>
+      <span><kbd>ESC</kbd> EXIT ARCADE</span>
+    </footer>
+  </div>
+</div>
+
+<!-- ================= MODALS ================= -->
+<div class="modalWrap" id="helpModal">
+  <div class="modal">
+    <button class="modalClose" data-close="helpModal">✕</button>
+    <div class="modalKicker">CONTROLS &amp; THINGS TO DO</div>
+    <h2>Welcome to the island.</h2>
+    <div class="helpGrid">
+      <div><kbd>W A S D</kbd><p>Run around. Oliver is springy.</p></div>
+      <div><kbd>SPACE</kbd><p>Jump — tap again for a double jump.</p></div>
+      <div><kbd>SHIFT</kbd><p>Sprint. Great for reaching the arcade.</p></div>
+      <div><kbd>E</kbd><p>Interact with whatever you're standing near.</p></div>
+      <div><kbd>F</kbd><p>Dance anywhere. Or use the dance floor.</p></div>
+      <div><kbd>CLICK</kbd><p>Poke Oliver. He reacts. Carefully.</p></div>
+      <div><kbd>DRAG / WHEEL</kbd><p>Orbit and zoom the camera.</p></div>
+      <div><kbd>P</kbd><p>Snap a photo and download it.</p></div>
+      <div><kbd>ARCADE</kbd><p>Eight cabinets on the east side. Press E at one.</p></div>
+    </div>
+    <p class="modalFoot">Your vibes and badges save in this browser. The island remembers.</p>
+  </div>
+</div>
+
+<div class="modalWrap" id="badgeModal">
+  <div class="modal badgeModal">
+    <button class="modalClose" data-close="badgeModal">✕</button>
+    <div class="modalKicker">ACHIEVEMENTS</div>
+    <h2>Badge case <span id="badgeTotal">0/8</span></h2>
+    <div class="badgeGrid" id="badgeGrid"></div>
+  </div>
+</div>
+
+</body>
+</html>

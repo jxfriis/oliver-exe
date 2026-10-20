@@ -74,3 +74,13 @@ npm run preview  # serve the production build
 - `src/lib/sound.ts` — WebAudio synth SFX (gesture-initiated)
 - `src/lib/voice.ts` — Puter TTS with system fallback
 - `src/lib/data.ts` — phrases, badges, booth backgrounds
+
+## Third look: 3D WORLD
+
+Click **3D WORLD** on the landing screen or in the header to teleport into the
+standalone Three.js island (`public/3d/`). It is a full 3D playground with its
+own HUD, objectives, dance floor, waterfall, and eight 3D arcade cabinets.
+Use **← BACK TO THE LAB** in the portal bar to return to the React playground.
+
+The 3D build is self-contained and served from `public/3d/`, so the original
+16-bit / HD modes and every existing feature keep working exactly as before.
