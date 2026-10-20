@@ -3,8 +3,8 @@ import { SPRITES, HD_SPRITES } from '../lib/sprites';
 
 // Cinematic landing: Oliver outside the castle. ENTER → he walks to the gate,
 // shrinks into the distance, the door bursts open with light, fade to black.
-function Landing({ bit16, onToggleBit, onEnter }: {
-  bit16: boolean; onToggleBit: () => void; onEnter: () => void;
+function Landing({ bit16, onToggleBit, onEnter, onPlay3d }: {
+  bit16: boolean; onToggleBit: () => void; onEnter: () => void; onPlay3d: () => void;
 }) {
   const [walking, setWalking] = useState(false);
   const [doorOpen, setDoorOpen] = useState(false);
@@ -143,6 +143,20 @@ function Landing({ bit16, onToggleBit, onEnter }: {
           {bit16 ? '▶ HD MODE' : '▶ 16-BIT'}
         </button>
       )}
+      {/* 3D world portal */}
+      {!walking && (
+        <button onClick={onPlay3d}
+          className="absolute font-display"
+          style={{
+            top: 64, right: 16, zIndex: 5, cursor: 'pointer',
+            fontSize: 11, color: '#05031a', background: '#B9A7F9',
+            border: '3px solid #05031a', borderRadius: 8, padding: '10px 14px',
+            boxShadow: '0 4px 0 #000, 0 0 22px rgba(185,167,249,.75)',
+            animation: 'portalPulse 2.4s ease-in-out infinite',
+          }}>
+          ▶ 3D WORLD
+        </button>
+      )}
       {/* the one button */}
       {!walking && (
         <div className="absolute left-1/2 -translate-x-1/2 text-center" style={{ bottom: '9%' }}>
@@ -169,6 +183,7 @@ function Landing({ bit16, onToggleBit, onEnter }: {
         @keyframes lanternSway { 0%{ transform: rotate(-4deg);} 100%{ transform: rotate(4.5deg);} }
         @keyframes towerGlow { 0%{ opacity:.55; transform: translate(-50%,-50%) scale(.96);} 100%{ opacity:1; transform: translate(-50%,-50%) scale(1.05);} }
         @keyframes stormPulse { 0%,86%,100%{ opacity:.35; filter:brightness(1);} 88%{ opacity:.75; filter:brightness(1.9);} 90%{ opacity:.4; filter:brightness(1);} 92%{ opacity:.7; filter:brightness(1.7);} 94%{ opacity:.35; filter:brightness(1);} }
+        @keyframes portalPulse { 0%,100%{ box-shadow:0 4px 0 #000, 0 0 18px rgba(185,167,249,.55);} 50%{ box-shadow:0 4px 0 #000, 0 0 30px rgba(185,167,249,.95), 0 0 60px rgba(198,242,78,.35);} }
       `}</style>
     </div>
   );

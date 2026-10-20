@@ -9,6 +9,7 @@ import SketchLayer, { type SketchHandle, type Stroke, type StampMark } from './c
 import BitLighting from './components/BitLighting';
 import DiscoFloor from './components/DiscoFloor';
 import Landing from './components/Landing';
+import ThreeWorld from './components/ThreeWorld';
 import IntroCinematic from './components/IntroCinematic';
 import Tutorial, { tourSeen, markTourSeen } from './components/Tutorial';
 import { GEAR, gearDef } from './components/FittedGear';
@@ -117,6 +118,8 @@ export default function App() {
   const [armyFollow, setArmyFollow] = useState(true);
   // 16-bit mode + sprite pose (16-bit is the default home)
   const [bit16, setBit16] = useState(true);
+  // full-screen portal into the standalone Three.js island
+  const [three3d, setThree3d] = useState(false);
   const [pose, setPose] = useState<StageSprite>('cutout-photo');
   const [flip, setFlip] = useState(false);
   // mad + meltdowns
@@ -942,6 +945,11 @@ export default function App() {
         <span className="hidden md:inline text-sm font-bold bg-white border-2 border-[#1e1b3a] rounded-full px-3 py-1">The Oliver Lab</span>
         <span className="text-sm font-bold bg-[#1e1b3a] text-white rounded-full px-3 py-1">👆 {interactions} interactions</span>
         <div className="flex-1" />
+        <button onClick={() => { setThree3d(true); stopBeat(); rickStop(); sfx.coin(); bump(1, 4); }}
+          className="btn-3d gloss bg-[#B9A7F9] border-2 border-[#1e1b3a] px-4 py-2 flex items-center gap-2 text-sm font-extrabold"
+          title="Teleport into the 3D island">
+          <Gamepad2 size={16} /> 3D WORLD
+        </button>
         <button onClick={() => { setBit16(!bit16); sfx.coin(); bump(1, 4); say(bit16 ? 'Back to HD, baby!' : '16-BIT MODE! Insert coin!'); }}
           className={`btn-3d gloss border-2 border-[#1e1b3a] px-4 py-2 flex items-center gap-2 text-sm font-extrabold ${bit16 ? 'bg-[#C6F24E]' : 'bg-[#191448] text-[#C6F24E]'}`}>
           <Binary size={16} /> {bit16 ? '16-BIT: ON' : 'GO 16-BIT'}
@@ -1395,7 +1403,8 @@ export default function App() {
               <li>• <b>Dance</b> — MAKE HIM DANCE for disco + synthesized beat (starts on click, mutable).</li>
               <li>• <b>Tamagotchi-Oliver</b> — a 1997 pocket Oliver. Stats decay in REAL TIME (even with the tab closed). Feed 🍪 play  scrub 🧼 before he despawns.</li>
               <li>• <b>Games</b> — Catch, Dodge, Hoops, Pong, Dash, Whack, Maze (3 depths), Rocket, Flappy, Snake.</li>
-              <li>• <b>GO 16-BIT</b> — whole UI + pixel sprite sheet + torch lighting. HD mode uses the realistic action sheet per move.</li>
+              <li>• <b>GO 16-BIT</b> - whole UI + pixel sprite sheet + torch lighting. HD mode uses the realistic action sheet per move.</li>
+              <li>◆ <b>3D WORLD</b> - teleport into the Three.js island: run, jump, shoot hoops, play the eight arcade cabinets, and dance.</li>
               <li>• Fill CHAOS and Oliver gets MAD — a different meltdown every time 😡</li>
               <li>• Secrets: click glasses / hair, hover 3s, press Space, type OLIVER, idle 45s, drag Oliver to the edge, click the logo.</li>
             </ul>
@@ -1470,6 +1479,7 @@ export default function App() {
         <Landing
           bit16={bit16}
           onToggleBit={() => { setBit16(!bit16); bump(1, 2); }}
+          onPlay3d={() => { setThree3d(true); stopBeat(); rickStop(); sfx.coin(); bump(1, 3); }}
           onEnter={() => {
             setEntered(true);
             setIntroPlaying(true);
@@ -1480,6 +1490,7 @@ export default function App() {
       {introPlaying && (
         <IntroCinematic bit16={bit16} onDone={() => { setIntroPlaying(false); setSoundAsk(true); }} />
       )}
+      {three3d && <ThreeWorld onClose={() => { setThree3d(false); sfx.pop(); }} />}
     </div>
   );
 }
